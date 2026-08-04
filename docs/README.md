@@ -24,8 +24,9 @@
 | 12 | [`goal2_design.md`](./goal2_design.md) | 目标二（三层 profiling 成本归因）实现设计：真实 vLLM `/metrics` spike 结果、token/episode/model invocation 三层各自怎么做、明确不做的部分 | 读完 11 |
 | 12b | [`goal2_real_validation_findings.md`](./goal2_real_validation_findings.md) | 目标二真实数据验证结果：token/episode 层跟 benchmark 报告数字完全吻合，model invocation 层 49/49 次调用 100% 精确归因，两处独立方法交叉验证通过 | 读完 12 |
 | 13 | [`deployment_migration_guide.md`](./deployment_migration_guide.md) | 迁移到新服务器（H100 80GB）+ 团队协作指南：版本控制补救、CUDA 13 下版本锁定怎么变、原生 tool-calling 能否替代 emulate_tools、MIG 分区 vs 真并发两种多人共用方案 | 需要迁移/加人的时候看 |
+| 14 | [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md) | 接入外部 benchmark 框架 tau2-bench（双控 agent 评测）的真实全链路记录：同步/异步桥接方案、三个真实 bug 的排查修复、Hooks 触发验证、原生 CLI vs 我们适配器的逐任务结果对比，以及"同一个 bench 能不能跑出同样效果"的实证结论 | 独立可读，想知道能不能接别的 benchmark 框架时看 |
 
-读完这 13 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
+读完这 14 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
 ## 按用途查找
 

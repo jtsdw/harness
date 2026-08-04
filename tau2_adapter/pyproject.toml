@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["tau2_adapter*"]
+
+[project]
+name = "tau2-adapter"
+version = "0.1.0"
+description = "Drives tau2-bench simulations (Environment/UserSimulator/Evaluator reused as libraries) from inside an inspect_ai Task/Solver, so inspect_trace's Hooks fire for the agent-under-test's model calls. Experimental integration, not a permanent core package."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT License" }
+dependencies = [
+    "inspect_ai",
+    "inspect_trace",
+    "tau2",
+    "anyio",
+]
+
+[tool.uv.sources]
+inspect_trace = { path = "../inspect_trace" }
+tau2 = { path = "/home/liuyingen/code/tau2-bench" }
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
