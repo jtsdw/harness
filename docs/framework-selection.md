@@ -157,9 +157,53 @@ smolagents adapter / baseline
 - 真实计费 token、服务端性能指标和本地估算值必须分开保存；
 - online 结果用于测量真实效果，offline replay 结果用于控制变量和因果比较。
 
+## 第四轮补充：tau2-bench 能不能当底座（不是当被测对象）
+
+前三轮比较的都是"通用 agent 框架能不能当底座"这个问题的候选项（Pydantic AI/Inspect AI/smolagents）。后来我们深度接入了 tau2-bench（Sierra 的 τ³-bench，一个双控客服 agent 评测框架）——但那是把它当**被测 benchmark** 接进我们已经选定的 inspect_ai 底座（完整过程见 [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md)，可复用方法论见 [`benchmark_integration_playbook.md`](./benchmark_integration_playbook.md)）。这次接入过程中读了 tau2-bench 相当一部分核心代码（`Orchestrator`/`Environment`/`Evaluator`/`registry`），足够反过来认真回答一个前几轮都没问过的问题：**tau2-bench 自己的 harness 机制，能不能反过来当底座、取代 inspect_ai？**
+
+答案是不能。逐项对照本文"选型标准"一节的五条标准，附真实代码证据（不是读文档/印象，全部是读源码得出的结论）。
+
+### 逐项核实
+
+**① 能不能重建完整 Agent execution trace——部分具备，但缺执行拓扑**
+
+`SimulationRun`/`Message` 数据模型（`src/tau2/data_model/simulation.py`、`src/tau2/data_model/message.py`）本身相当完整，含 cost、usage、`raw_data`（litellm 原始响应全量保留）、review 等字段，这是 tau2-bench 现有能力里离"可用"最近的一块。但没有 per-step 结构化耗时/并行标记：`Orchestrator._execute_tool_calls()`（`orchestrator.py:313-329`）即使一次 assistant 消息里有多个 tool_call，也是 `for` 循环顺序执行，没有"这批调用是否并行发起"的元数据；重试信息完全不落盘——`run_with_retry()`（`runner/progress.py:19-52`）对整次 simulation 做 try/except 重试，重试次数/原因只打印到 console/日志，`SimulationRun` 类里没有对应字段，"这个任务重试了几次才成功"这件事在最终产物里完全看不出来。
+
+**② 能不能做 token / model-invocation / episode 三层成本归因——episode 层有，另外两层几乎空白**
+
+episode 层（每次 simulation 的总 cost/reward，`metrics/agent_metrics.py`）可以直接复用。但 model-invocation 层（TTFT/ITL/queueing）完全没有，而且不是"没顾上加字段"，是架构上不支持采集：唯一的模型调用入口 `llm_utils.generate()`（`llm_utils.py:406-418`）用的是 litellm **同步非流式** `completion()`，`generation_time_seconds` 是"发请求到拿到完整响应"的单一标量，没有逐 chunk 时间戳可拆。语音模块里唯一貌似细粒度的 `response_latency_mean`/`yield_latency_mean`（`metrics/voice_interaction_metrics.py`）衡量的是"对话轮转"延迟（谁等谁说话），数据源是离散仿真 tick，不是真实模型 API 的流式 token 输出——`config.py:82-86` 的 `DEFAULT_TEXT_STREAMING_CHUNK_BY = "words"` 证实所谓"流式语音"其实是把已经完整生成好的文本按词切块模拟语速，跟真实 TTFT 无关。token 层同样被截断：`get_response_usage()`（`llm_utils.py:134-141`）只从 litellm 的 `Usage` 对象里取 `completion_tokens`/`prompt_tokens` 两个数字，reasoning/cache 相关的细分字段（很多 provider 的 `usage.completion_tokens_details.reasoning_tokens` 等）被显式丢弃——虽然完整原始响应保留在 `raw_data` 里理论上可以二次解析，但 tau2 自己的统计链路（`get_token_usage()`、`agent_metrics.py`）完全不读这部分，等于要绕开现有抽象自己重做一层。
+
+**③ 能不能提供标准化的 context/generation/runtime/tool 干预点——没有等价的 Hooks 机制**
+
+`registry.py` 的 `register_domain`/`register_agent_factory`/`register_user` 是"接入新领域/新实现"的组件注册表（本质是几个 `Dict[str, Callable]`，`registry.py:70-275`），跟 inspect_ai 那种"第三方包通过 `entry_points` 自动挂进任意一次运行、观测每一次模型调用"的插件机制不是一回事——全仓库搜索 `entry_points` 零命中，`pyproject.toml` 只声明了一个 CLI 入口。全仓库范围搜 `hook`/`observer`/`listener`/`callback`，命中的要么是语音全双工模式的打断/背景应答逻辑（`agent/base/streaming.py`，领域特定，跟通用 instrumentation 无关），要么是借用 litellm 自带的 `success_callback` 接 Langfuse（`llm_utils.py:66-69`，第三方可观测性 SaaS 的挂钩，不是 tau2 自己暴露的接口）。想做统一的跨领域 instrumentation，唯一现实路径是直接 monkeypatch `llm_utils.generate`——侵入式改造，不是插件化接入。
+
+**④ 能不能支持 online execution 与 offline replay——online 没问题，replay 名不副实**
+
+`checkpoint.py` 的 `--save`/断点续跑机制解决的是"避免重复计算"（跳过已经跑完的 `(trial, task_id, seed)` 组合），不是"固定住某一层、只重放另一层"；`evaluate_trajectories.py` 能对已存的静态消息序列重新跑 evaluator 算分（评估标准变了之后重新打分），但完全不涉及重新调用 LLM/agent/user，帮不上"固定 user simulator 回复、只让 agent 侧变量做对照实验"这个目标四的核心诉求。全仓库搜 `replay`/`cassette`/`fixture` 零命中。litellm 的响应缓存（`LLM_CACHE_ENABLED`）在 prompt 完全一致时能顺带实现某种"确定性重放"，但这是缓存的副作用不是设计意图，只要对话历史分叉一步就失效，也没法只固定某一层放开另一层。
+
+**⑤ 代码质量、测试、维护状态——活跃但量级和保障远小于 inspect_ai**
+
+`git log` 显示 185 commits（对比 inspect_ai 6952 commits，约 1/37）、13 个贡献者、项目历史约 14 个月，近 90 天 57 次提交——**活跃度不低，不是废弃项目**，这一点要如实肯定。但核心 Python 包 `src/tau2/` 完全没有对应的 GitHub Actions CI（`.github/workflows/` 下 3 个 workflow 全部只覆盖 leaderboard 前端），60 个测试文件、约 2.1 万行测试代码是真实存在的,但执行依赖本地 `pre-commit` hook（`.pre-commit-config.yaml` 里 `entry: make check-all`），不是服务端强制 gate，`git commit --no-verify` 就能绕过。
+
+### 一个额外的架构性限制：同步执行核心
+
+`BaseOrchestrator.run()`/`step()`（`orchestrator.py:260-291`）是普通 `def`，核心循环里没有一处 `await`；模型调用走的是 litellm 同步 `completion()` 而非 `acompletion()`。并发的唯一来源是跨 simulation 的线程池（`runner/batch.py:810`），单次 simulation 内部完全串行。连 FastAPI 服务层的 `async def` 端点（`api_service/simulation_service.py:42-52`）内部也是直接同步阻塞调用，没有 `await`/线程池 offload——这就是为什么这次接入 tau2-bench 时，必须用 `anyio.to_thread.run_sync` + `anyio.from_thread.run` 做同步/异步桥接才能让 inspect_ai 的异步 Hooks 生效（见 `tau2_bench_integration_findings.md`）。反过来想："如果拿 tau2-bench 的 Orchestrator 当异步 instrumentation 的载体"，需要把 `step()`/`Environment.get_response()`/`llm_utils.generate()` 整条链路重写成 `async def`，这基本等于重写整个执行引擎。
+
+### 一个跟通用性直接相关的限制：Domain 是重量级、领域绑定的概念
+
+加一个新 domain 需要 `data_model.py`（DB 子类）+ `tools.py`（工具集）+ `environment.py` + `policy.md`（自然语言策略文本）+ `tasks.json` 全套（`domains/README.md`），即便是专门做到最小的 `mock` domain 也有约 338 行。这套抽象天然假设"DB 状态 + 工具 API + 自然语言政策 + 多轮客服对话"——想拿它跑我们已经跑过的 GSM8K（单轮数学问答，没有 DB/工具/user simulator）或 BFCL（纯函数调用准确率，通常不需要多轮 user 交互），都得硬造一堆不符合它原生语义的空壳组件，工作量接近"用一个为客服场景设计的框架削足适履"，而且 tau2-bench 没有 inspect_evals 那样的第三方 benchmark 生态——它自己内置的 4-5 个领域（`mock`/`airline`/`retail`/`telecom`/`banking_knowledge`）就是全部，`CONTRIBUTING.md` 鼓励的贡献方式是把新 domain 直接合并进这个仓库,而不是独立发布成可即插即用的第三方包。
+
+### 结论
+
+tau2-bench 是一个为"双控客服 agent 评测"精心设计、执行成熟的**同步、领域绑定型 benchmark 框架**——它在"跑通一个客服模拟任务并按 DB/沟通/工具调用维度打分"这件事上做得很扎实（`Orchestrator`/`Evaluator`/checkpoint-resume 都是生产级质量），这也是这次能够顺利把它接进来当被测对象、复用它的 `Environment`/`Evaluator` 不用重新发明评分逻辑的原因。但它从设计初衷上就不是"通用 agent 执行观测底座"：没有 Hooks/插件系统，model-invocation 级指标因为同步非流式调用架构而拿不到，token 归因被现有抽象截断，replay 能力名不副实，Domain 概念绑定了具体业务场景、没有第三方生态。要把它改造成能替代 inspect_ai 的底座，意味着要**从零建 Hooks/插件系统 + 从零建流式 TTFT/ITL 采集 + 从零建细粒度 token 归因 + 从零把执行核心异步化 + 从零建轻量任务接入层**——这五项改造叠加在一个 185 commits、核心包无 CI 强制门禁的中等规模项目上,风险和工作量都明显高于继续用 inspect_ai（已有 Hooks、已有异步核心、已有 inspect_evals 生态）、把 tau2-bench 仅作为被测 benchmark 接入的现有路线,跟第二轮对 smolagents 的结论（"不建议作为通用底座,但适合当研究对象"）是同一类判断,只是这次是事后用真实接入经验反向验证,而不是选型阶段的预判。
+
+tau2-bench 值得保留使用的部分，仅限于它作为**被测 domain**时提供的高质量客服场景任务集和四维评测标准（ENV/ACTION/COMMUNICATE/NL_ASSERTIONS），以及它的 `SimulationRun`/`Message` 数据模型可以作为"如何记录一次完整多轮 agent 交互轨迹"的设计参考。
+
 ## 相关文档
 
 - [Efficient Harness 总体目标与设计](./efficient-harness.md)
 - [Inspect AI 路线与现状分析](./inspect_ai_roadmap.md)
 - [本地与远程服务器同步指南](/home/liuyingen/code/doc/sync-guide.md)（通用指南，不专属于这个项目，所以没有跟着这次重构搬过来）
 - 目标一实现：`/home/liuyingen/code/efficient-harness/inspect_trace/README.md`
+- [tau2-bench 接入的完整过程与真实结果](./tau2_bench_integration_findings.md)（第四轮补充的调研基础，把 tau2-bench 当被测 benchmark 接入的详细记录）
+- [接入新 benchmark 操作手册](./benchmark_integration_playbook.md)（"当被测对象接入" vs "当底座"这两件事的方法论都在这篇里，本文第四轮是后者的具体案例）
