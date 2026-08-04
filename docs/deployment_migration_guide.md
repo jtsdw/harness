@@ -31,41 +31,31 @@
 
 **待现场验证**：具体该锁定哪个 vLLM 版本号，需要在新服务器上实际 `uv add vllm` 看它解析到哪个版本、`import vllm` 能不能正常跑通——不要照抄这份文档里查到的任何具体版本号（版本更新很快，等你真正装的时候大概率已经有更新的稳定版）。`pyairports` 那个坏 wheel 的 bug 是否还存在也需要重新触发验证一次（大概率新版本 vLLM 已经不依赖那条路径，但没有实测过不能打包票）。
 
-### 原生 tool-calling：`emulate_tools=true` 这条路径大概率可以退休了
+### 原生 tool-calling：vLLM 这一侧已确认支持，inspect_ai 这一侧还有一个真实兼容性坑
 
-旧机器踩的一大堆坑（`<tool_call>` 标签解析失败、标签互相污染、静默丢失——见 `goal1_r3_r4_real_benchmark_findings.md` 的"附加发现"部分）根源都是 `emulate_tools=true`：因为旧版 vLLM 没有 `--enable-auto-tool-choice`/`--tool-call-parser`，逼着模型把整个调用写成裸文本再让 inspect_ai 自己用正则解析。
+**更正（原判断有误，已用真实数据验证过）**：这一节原来整段都是"待现场验证"的推测。接入 tau2-bench 时（[`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md) 的 Bug 1/Bug 3）真做了这个实验，结论分两半：
 
-已核实（查 vLLM 官方文档 + Qwen 官方部署文档）：Qwen2.5 系列的 chat template 原生支持 Hermes 风格的 tool-calling 格式，vLLM 对应的启动参数是：
+- **vLLM 服务端确认支持**：`vllm serve Qwen/Qwen2.5-3B-Instruct --enable-auto-tool-choice --tool-call-parser hermes`（`local-model-server/scripts/serve.sh` 现在有 `NATIVE_TOOL_CALLING=true` 这个开关直接启用），真实 `curl` 请求能拿到结构良好的原生 `tool_calls`——这条在**旧硬件**（RTX 2000 Ada，就是这份文档原本假设要升级掉的那台机器）上就已验证通过，新硬件大概率只会更没问题，不需要重新怀疑这一半。
+- **但 inspect_ai 这边没那么简单**：单纯"去掉 `-M emulate_tools=true`"**不会**让 BFCL 那几条标签解析 bug 静默消失——会直接撞上另一个真实错误：inspect_ai 的 `openai-api` provider 无条件给每个工具加一个 `"strict"` 字段，这版 vLLM 的请求 schema 完全不认识，直接 400（tau2_bench_integration_findings.md 的 Bug 3）。要真正跑通原生 tool-calling，需要一个去掉这个字段的自定义 `ModelAPI` provider——`tau2_adapter/src/tau2_adapter/_registry.py` 已经有一个可以直接抄的真实例子（注册成 `tau2-agent-vllm`）。
 
-```bash
-vllm serve Qwen/Qwen2.5-3B-Instruct --enable-auto-tool-choice --tool-call-parser hermes
-```
-
-这样跑起来之后，inspect_ai 那边应该可以去掉 `-M emulate_tools=true`，直接走原生 `tool_calls` 字段——**理论上会让需求四那一整类"标签解析失败"的 bug 消失**，因为不再需要客户端自己拼接/解析裸文本标签。
-
-**待现场验证**：这个推测需要重新跑一遍目标一的真实 benchmark 验证才能确认——如果真的验证通过，`goal1_r3_r4_real_benchmark_findings.md` 里那几条标签解析 bug 的结论就要标注"仅适用于 emulate_tools 路径，原生 tool-calling 下不复现"，不能不验证就直接下结论说问题解决了。完整可复制运行的命令（跟原来 emulate_tools 那次的差异只有两处：起服务时加 `--enable-auto-tool-choice --tool-call-parser hermes`，跑 benchmark 时去掉 `-M emulate_tools=true`）：
+**仍然待验证的部分**：上面这个自定义 provider 目前只在 tau2-bench 的场景下验证过，**没有专门针对 BFCL 跑过**——也就是说"需求四那几条标签解析 bug 在原生 tool-calling 下是否真的消失"这个问题依然没有直接答案。要补这个验证，最省事的路径是复用 `tau2_adapter` 现成的 venv（同时装了 `inspect_evals` 和这个自定义 provider）跑一次 BFCL：
 
 ```bash
-# 1. 用原生 tool-calling 参数起服务（对照原来 serve.sh 默认不带这两个参数）
 cd /home/liuyingen/code/efficient-harness/local-model-server
-uv run vllm serve Qwen/Qwen2.5-3B-Instruct \
-  --port 8000 --gpu-memory-utilization 0.85 --max-model-len 16384 \
-  --enable-auto-tool-choice --tool-call-parser hermes
+NATIVE_TOOL_CALLING=true ./scripts/serve.sh
 
-# 2. 另开一个终端，跑同样的 multi_turn_base 验证，但不传 MODEL_ARGS（不需要 emulate_tools=true 了）
-cd /home/liuyingen/code/efficient-harness/inspect_trace
-MODEL="openai-api/vllm/Qwen/Qwen2.5-3B-Instruct" \
-VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" \
-CATEGORIES="multi_turn_base" LIMIT=8 MAX_CONNECTIONS=1 \
-OUTPUT_DIR="/home/liuyingen/code/efficient-harness/runs/native_tool_calling_validation" \
-./scripts/run_bfcl_benchmark.sh
+cd /home/liuyingen/code/efficient-harness/tau2_adapter
+INSPECT_TRACE_DIR="/tmp/bfcl_native_check/.inspect_trace" \
+uv run --project . inspect eval inspect_evals/bfcl \
+  -T "categories=['multi_turn_base']" \
+  --model "tau2-agent-vllm/vllm/Qwen/Qwen2.5-3B-Instruct" \
+  --limit 8 --max-connections 1 \
+  --log-dir /tmp/bfcl_native_check/logs
 
-# 3. 检查这条 run 的 action_parsing 记录里，机制一/二那两类标签解析故障（见
-#    goal1_r3_r4_real_benchmark_findings.md"附加发现"一节）是不是真的不再出现
 uv run python3 -c "
 from pathlib import Path
 from inspect_trace.analysis._loader import load_records_by_sample, records_of_kind
-trace_dir = Path('/home/liuyingen/code/efficient-harness/runs/native_tool_calling_validation/.inspect_trace')
+trace_dir = Path('/tmp/bfcl_native_check/.inspect_trace')
 by_sample = load_records_by_sample(trace_dir)
 all_records = [r for records in by_sample.values() for r in records]
 errors = [r for r in records_of_kind(all_records, 'action_parsing') if r['error_present']]
@@ -74,6 +64,8 @@ for e in errors:
     print(' ', e['error_type'], e.get('error_message', '')[:80])
 "
 ```
+
+这次没有顺手跑这个验证（跟这次的任务范围——同步机制和多人协作——是两件事），留给下次真正要做需求四原生 tool-calling 验证的时候用，如实标注这一条尚未验证,不是回避。
 
 ### 显存从 16GB 到 80GB：值得考虑换更大的模型，但这是独立决定
 

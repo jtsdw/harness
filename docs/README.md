@@ -26,8 +26,10 @@
 | 13 | [`deployment_migration_guide.md`](./deployment_migration_guide.md) | 迁移到新服务器（H100 80GB）+ 团队协作指南：版本控制补救、CUDA 13 下版本锁定怎么变、原生 tool-calling 能否替代 emulate_tools、MIG 分区 vs 真并发两种多人共用方案 | 需要迁移/加人的时候看 |
 | 14 | [`benchmark_integration_playbook.md`](./benchmark_integration_playbook.md) | 接入新 benchmark 的操作手册：三层难度分类、前置条件检查、核心架构原则、实现步骤划分、验证顺序、会反复遇到的坑分类总结 | 下次要接一个新 benchmark 时，先看这篇 |
 | 14b | [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md) | 上面那篇手册的真实案例来源：接入 tau2-bench（双控 agent 评测）的完整全链路记录——同步/异步桥接方案、三个真实 bug 的排查修复、Hooks 触发验证、原生 CLI vs 我们适配器（修复前后两个版本）的逐任务结果对比 | 读完 14，想看具体案例细节时看 |
+| 15 | [`remote_compute_workflow.md`](./remote_compute_workflow.md) | 本地 agent 节点 + 远程 NSCC 计算节点的日常工作流：代码同步（git 为主）、结果拉取、PBS 两种使用范式（交互式常驻 vLLM / 批处理长任务）、计算节点友好格式检查清单、待现场验证清单 | 要往计算节点部署/跑实验时看 |
+| 16 | [`team_collaboration.md`](./team_collaboration.md) | 两人协作方案：git 分支+PR 规范、共享 NSCC 账号下的计算资源协调、项目管理约定 | 读完 15，两人协作时看 |
 
-读完这 15 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
+读完这 18 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
 ## 按用途查找
 
@@ -40,6 +42,7 @@
 - **忘了某个词是什么意思** → [`glossary.md`](./glossary.md)
 - **要在新机器上从零搭环境** → [`environment_checklist.md`](./environment_checklist.md)
 - **想接入一个新的外部 benchmark 框架** → 14（benchmark_integration_playbook）
+- **要往 NSCC 计算节点部署/跑实验、或者两人协作有疑问** → 15（remote_compute_workflow）+ 16（team_collaboration）
 
 ## 我们写的代码/脚本在哪（不在这个文件夹里，列出来方便对照）
 
@@ -50,6 +53,8 @@
 - `goal1_r3_r4_dashboard.html` 生成脚本：`../inspect_trace/scripts/build_r3_r4_dashboard.py` + `_dashboard_template.html`，用法见 [`goal1_dashboard_guide.md`](./goal1_dashboard_guide.md)
 - 目标二三层 profiling 实现：`inspect_trace/vllm_metrics.py`（model invocation 层实时采集）+ `inspect_trace/analysis/{token_layer,episode_layer,pricing}.py`（token/episode 层离线分析），自带测试 `tests/test_vllm_metrics.py`/`test_analysis_layers.py`
 - 本地模型服务：`../local-model-server/`，自带 `README.md` + `scripts/{setup,serve,stop}.sh`
+- tau2-bench 适配器（第三方 benchmark 接入示例）：`../tau2_adapter/`，自带 `scripts/{setup_tau2_bench,run_native_baseline,run_adapter}.sh`
+- 跨子项目脚本（NSCC 同步/PBS）：`../scripts/{pull_runs,nscc_interactive_gpu_session,pbs_vllm_server_job}.sh`，用法见 [`remote_compute_workflow.md`](./remote_compute_workflow.md)
 - 实验原始数据（gitignored，不会被清理）：`../runs/`
 - 上游 inspect_ai 本体：**不在这个仓库里**，只读参考克隆仍在 `/home/liuyingen/code/inspect_ai/`（读框架自身源码/走官方教程用，不是我们项目的一部分）
 
