@@ -51,6 +51,32 @@ requirements (需求一-四) they satisfy:
    request are retries of each other, how many attempts it took, and how much wait time was spent on
    backoff.
 
+## Goal 2: three-layer cost profiling
+
+Built on top of everything above, not a separate mechanism — see
+`/home/liuyingen/code/efficient-harness/docs/goal2_design.md` for the full design and
+`goal2_real_validation_findings.md` for real-data validation results.
+
+**Model invocation layer — `vllm_metrics.py`, the one module here with live runtime collection.**
+Scrapes vLLM's own `/metrics` Prometheus endpoint once before and once after each model call
+(via the same `on_before_model_generate`/`on_sample_event` Hooks everything else uses), and takes
+the delta of the `time_to_first_token_seconds`/`time_per_output_token_seconds`/
+`e2e_request_latency_seconds` histograms to get real TTFT/ITL/e2e-latency for that specific call —
+exact whenever `MAX_CONNECTIONS=1` (the histogram's `_count` delta is exactly 1), and honestly
+flagged `attribution_confidence: "ambiguous"` otherwise. Only produces records when the target
+model is actually a local vLLM server reachable at `INSPECT_TRACE_VLLM_METRICS_URL` (default
+`http://localhost:8000/metrics`); silently produces nothing against a hosted model, by design.
+
+**Token layer and episode layer — `analysis/{token_layer,episode_layer,pricing}.py`, pure offline
+analysis, no new collection.** These read the six Goal-1 records above (already on disk) plus the
+real `.eval` log and aggregate them per-episode: `token_layer.summarize_run(trace_dir)` for
+per-episode token totals broken down by pipeline stage and by new/reused; `episode_layer.
+summarize_run(trace_dir)` for end-to-end latency, `total_busy_seconds` vs. naive exclusive-time sum
+(the difference being real observed concurrency savings), LLM/tool call counts, retries, success
+(via `inspect_ai.scorer.value_to_float()`, not hardcoded to any one scorer), and cost (via
+`pricing.py`'s explicit model-name → price table — deliberately has no invented prices for models
+never actually run against).
+
 ## Install
 
 ```bash
@@ -68,7 +94,8 @@ ${INSPECT_TRACE_DIR:-.inspect_trace}/
   <run_id>/
     <eval_id>/
       sample-<sample_uuid>.jsonl   # one line per prefill_diff / segment_tokens / attempt_group /
-                                   # token_attribution / execution_topology / action_parsing record
+                                   # token_attribution / execution_topology / action_parsing /
+                                   # vllm_metrics record
       _manifest.jsonl              # eval_id -> original .eval log location
 ```
 

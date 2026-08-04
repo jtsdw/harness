@@ -364,9 +364,13 @@ def extract_goal2_layers() -> dict:
             }
         )
 
-    exact_calls = [c for c in model_invocation_calls if c["attribution_confidence"] == "exact"]
+    exact_calls = [
+        c for c in model_invocation_calls if c["attribution_confidence"] == "exact"
+    ]
     ttfts = [c["ttft_seconds"] for c in exact_calls if c["ttft_seconds"] is not None]
-    itls = [c["itl_seconds_avg"] for c in exact_calls if c["itl_seconds_avg"] is not None]
+    itls = [
+        c["itl_seconds_avg"] for c in exact_calls if c["itl_seconds_avg"] is not None
+    ]
 
     return {
         "token_layer": {
@@ -394,7 +398,9 @@ def extract_all() -> dict:
 
     mt_episode_by_uuid = {
         e.sample_uuid: e
-        for e in episode_layer.summarize_episode_layer(MULTI_TURN_RUN_DIR / ".inspect_trace")
+        for e in episode_layer.summarize_episode_layer(
+            MULTI_TURN_RUN_DIR / ".inspect_trace"
+        )
     }
     for samp in mt_samples:
         ep = mt_episode_by_uuid.get(samp["uuid"])

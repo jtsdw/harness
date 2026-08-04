@@ -43,7 +43,37 @@ vllm serve Qwen/Qwen2.5-3B-Instruct --enable-auto-tool-choice --tool-call-parser
 
 这样跑起来之后，inspect_ai 那边应该可以去掉 `-M emulate_tools=true`，直接走原生 `tool_calls` 字段——**理论上会让需求四那一整类"标签解析失败"的 bug 消失**，因为不再需要客户端自己拼接/解析裸文本标签。
 
-**待现场验证**：这个推测需要重新跑一遍目标一的真实 benchmark 验证（复用 `run_bfcl_benchmark.sh`，去掉 `emulate_tools=true`）才能确认——如果真的验证通过，`goal1_r3_r4_real_benchmark_findings.md` 里那几条标签解析 bug 的结论就要标注"仅适用于 emulate_tools 路径，原生 tool-calling 下不复现"，不能不验证就直接下结论说问题解决了。
+**待现场验证**：这个推测需要重新跑一遍目标一的真实 benchmark 验证才能确认——如果真的验证通过，`goal1_r3_r4_real_benchmark_findings.md` 里那几条标签解析 bug 的结论就要标注"仅适用于 emulate_tools 路径，原生 tool-calling 下不复现"，不能不验证就直接下结论说问题解决了。完整可复制运行的命令（跟原来 emulate_tools 那次的差异只有两处：起服务时加 `--enable-auto-tool-choice --tool-call-parser hermes`，跑 benchmark 时去掉 `-M emulate_tools=true`）：
+
+```bash
+# 1. 用原生 tool-calling 参数起服务（对照原来 serve.sh 默认不带这两个参数）
+cd /home/liuyingen/code/efficient-harness/local-model-server
+uv run vllm serve Qwen/Qwen2.5-3B-Instruct \
+  --port 8000 --gpu-memory-utilization 0.85 --max-model-len 16384 \
+  --enable-auto-tool-choice --tool-call-parser hermes
+
+# 2. 另开一个终端，跑同样的 multi_turn_base 验证，但不传 MODEL_ARGS（不需要 emulate_tools=true 了）
+cd /home/liuyingen/code/efficient-harness/inspect_trace
+MODEL="openai-api/vllm/Qwen/Qwen2.5-3B-Instruct" \
+VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" \
+CATEGORIES="multi_turn_base" LIMIT=8 MAX_CONNECTIONS=1 \
+OUTPUT_DIR="/home/liuyingen/code/efficient-harness/runs/native_tool_calling_validation" \
+./scripts/run_bfcl_benchmark.sh
+
+# 3. 检查这条 run 的 action_parsing 记录里，机制一/二那两类标签解析故障（见
+#    goal1_r3_r4_real_benchmark_findings.md"附加发现"一节）是不是真的不再出现
+uv run python3 -c "
+from pathlib import Path
+from inspect_trace.analysis._loader import load_records_by_sample, records_of_kind
+trace_dir = Path('/home/liuyingen/code/efficient-harness/runs/native_tool_calling_validation/.inspect_trace')
+by_sample = load_records_by_sample(trace_dir)
+all_records = [r for records in by_sample.values() for r in records]
+errors = [r for r in records_of_kind(all_records, 'action_parsing') if r['error_present']]
+print(f'{len(errors)} 条解析/校验错误（原来 emulate_tools 路径下 5 个样本就有 6 条真实错误）')
+for e in errors:
+    print(' ', e['error_type'], e.get('error_message', '')[:80])
+"
+```
 
 ### 显存从 16GB 到 80GB：值得考虑换更大的模型，但这是独立决定
 
@@ -81,7 +111,19 @@ nvidia-smi -L                                              # 确认切分结果�
 
 这不是团队协作本身要求的，是趁着这次迁移**必须**要做的一次验证：`concurrency_savings_seconds`/`queue_depth_running`/`queue_depth_waiting`/`preemptions_delta` 这几个字段，在旧机器上积累的全部真实数据里**恒为 0**——不是因为算法错了（`concurrency_savings_seconds` 在专门写的 mock 场景里验证过能正确算出正数），是因为旧机器上的测试条件（`MAX_CONNECTIONS=1` + BFCL 工具默认不开 `parallel=True`）结构性地从没触发过并发/排队。这几个字段"在真的有并发/排队时是否正确"至今没有被验证过，只验证了"没有并发时正确显示 0"。详细复盘见 [`inspect_ai_roadmap.md`](./inspect_ai_roadmap.md)"目标一/二现状批判性复盘"一节。
 
-新服务器是第一次有条件打破这个限制的机会。不管最终选方案 A 还是 B，建议单独跑一次刻意制造负载的验证实验：给 BFCL 的部分工具显式标 `@tool(parallel=True)`（或者换一个原生会并行调用工具的 agent/benchmark）+ `MAX_CONNECTIONS>1`，确认这几个字段能正确从 0 变成非零值。这一步应该在"团队开始日常使用"之前做，而不是顺带做——一旦多人开始用，就很难再干净地制造"故意让它排队/并发"这种受控条件了。
+新服务器是第一次有条件打破这个限制的机会。不管最终选方案 A 还是 B，建议单独跑一次刻意制造负载的验证实验。`queue_depth_running`/`queue_depth_waiting`/`preemptions_delta` 这几个字段只需要 `MAX_CONNECTIONS>1` 就能触发（不需要改 BFCL 工具配置），已经写成了现成的脚本，直接跑：
+
+```bash
+cd /home/liuyingen/code/efficient-harness/local-model-server && ./scripts/serve.sh   # 先确保服务在跑
+cd /home/liuyingen/code/efficient-harness/inspect_trace
+LIMIT=20 CONCURRENT=8 ./scripts/run_concurrency_validation.sh
+```
+
+脚本会自动跑两次同样的 BFCL 切片（一次 `MAX_CONNECTIONS=1` 基线，一次 `MAX_CONNECTIONS=$CONCURRENT`），然后打印两次的 `attribution_confidence` 分布和 `queue_depth`/`preemptions` 对比——脚本内部注释和输出末尾都写了具体该怎么解读这两组数字。**如果并发那次直接把服务崩了，这本身就是"新硬件上 `MAX_CONNECTIONS>1` 到底还稳不稳"这个问题的答案**，不算脚本出错。
+
+`observed_parallel`（真并行 tool call）这个字段则需要 BFCL 工具真的标了 `@tool(parallel=True)`（或者换一个原生会并行调用工具的 agent/benchmark）——这一步脚本没法自动化，因为改工具配置是个需要人工判断的研究决定，不是简单的环境变量。
+
+这一步应该在"团队开始日常使用"之前做，而不是顺带做——一旦多人开始用，就很难再干净地制造"故意让它排队/并发"这种受控条件了。
 
 ### 两个方案都需要的：网络访问方式
 
