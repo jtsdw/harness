@@ -2,6 +2,8 @@
 
 延续项目一贯的方法论：先设计（见上一轮的架构调研，已并入下文"背景"一节），再真实跑通，如实报告结果——包括踩过的坑、遇到的真实 bug、以及"两条路径结果不完全一致"这类不方便但真实的发现。
 
+配套可视化面板：[`tau2_dashboard.html`](./tau2_dashboard.html)（本地打开即可，不需要联网/起服务）——逐任务对比表、三个 bug 的说明、目标一/二真实数据、以及三条有代表性任务的完整双控对话转录，跟本文的每一节对应。
+
 ## 背景：为什么要接 tau2-bench，以及一开始的技术判断
 
 用户想知道 tau2-bench（Sierra 的 τ³-bench，一个面向客服场景的双控 agent 评测框架）能不能接入我们的 harness，以及"跑同一个 bench 是否能跑出同样效果"。tau2-bench 是完全独立的定制框架——自己的 `Orchestrator`/`Environment`/`Evaluator`/`UserSimulator`，模型层用 LiteLLM，不基于 inspect_ai。核心特点是"双控"：`User` 不是数据集里的固定脚本，是另一个真实跑的 LLM（`UserSimulator`），跟 agent 动态对话；评分基于 DB 状态哈希比对 + 字符串匹配 + 可选 LLM 判断的自然语言断言，不是 AST 匹配。

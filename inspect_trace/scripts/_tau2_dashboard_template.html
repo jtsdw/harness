@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>tau2-bench 接入：真实结果</title>
+<style>
+@font-face { font-family: "LM Sans"; src: url(data:font/otf;base64,__LM_REGULAR__) format("opentype"); font-weight: 400; }
+@font-face { font-family: "LM Sans"; src: url(data:font/otf;base64,__LM_BOLD__) format("opentype"); font-weight: 700; }
+
+:root {
+  --bg: #f6f4ee; --surface: #ffffff; --surface-2: #ece8de; --border: #d9d3c4;
+  --text: #201e1a; --text-dim: #6b6459; --accent: #b56a28; --accent-2: #2f7d78;
+  --good: #3f7d4c; --bad: #a83358;
+  --accent-bg: rgba(181, 106, 40, 0.10); --good-bg: rgba(63, 125, 76, 0.12); --bad-bg: rgba(168, 51, 88, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161c; --surface: #1c1f28; --surface-2: #262a35; --border: #333846;
+    --text: #e9e6df; --text-dim: #9b9fac; --accent: #d98e4a; --accent-2: #5fa8a3;
+    --good: #6fae7c; --bad: #c9587a;
+    --accent-bg: rgba(217, 142, 74, 0.14); --good-bg: rgba(111, 174, 124, 0.14); --bad-bg: rgba(201, 88, 122, 0.16);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161c; --surface: #1c1f28; --surface-2: #262a35; --border: #333846;
+  --text: #e9e6df; --text-dim: #9b9fac; --accent: #d98e4a; --accent-2: #5fa8a3;
+  --good: #6fae7c; --bad: #c9587a;
+  --accent-bg: rgba(217, 142, 74, 0.14); --good-bg: rgba(111, 174, 124, 0.14); --bad-bg: rgba(201, 88, 122, 0.16);
+}
+:root[data-theme="light"] {
+  --bg: #f6f4ee; --surface: #ffffff; --surface-2: #ece8de; --border: #d9d3c4;
+  --text: #201e1a; --text-dim: #6b6459; --accent: #b56a28; --accent-2: #2f7d78;
+  --good: #3f7d4c; --bad: #a83358;
+  --accent-bg: rgba(181, 106, 40, 0.10); --good-bg: rgba(63, 125, 76, 0.12); --bad-bg: rgba(168, 51, 88, 0.12);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.5;
+}
+a { color: var(--accent); }
+code, .mono { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; }
+
+header {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 24px;
+  display: flex; align-items: baseline; gap: 20px; flex-wrap: wrap;
+}
+.brand { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 1.1rem; }
+.brand .sub { color: var(--text-dim); font-weight: 400; font-size: 0.85rem; margin-left: 8px; }
+nav { display: flex; gap: 16px; font-size: 0.9rem; }
+nav a { text-decoration: none; color: var(--text-dim); }
+nav a:hover { color: var(--accent); }
+
+main { max-width: 1180px; margin: 0 auto; padding: 24px; }
+
+.panel {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 22px 24px; margin-bottom: 22px;
+}
+.panel-head {
+  font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 1.15rem;
+  margin: 0 0 6px;
+}
+.panel-desc { color: var(--text-dim); font-size: 0.92rem; margin: 0 0 18px; max-width: 74ch; }
+
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 4px; }
+.card {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 16px;
+}
+.card .label { font-size: 0.78rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
+.card .num {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 1.7rem; font-weight: 700; color: var(--accent); margin-top: 4px;
+}
+.card .foot { font-size: 0.8rem; color: var(--text-dim); margin-top: 2px; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+tr.match-exact { }
+tr.match-reward_diff { background: var(--bad-bg); }
+tr.match-reward_same_term_diff { background: var(--accent-bg); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.pill.warn { background: var(--accent-bg); color: var(--accent); }
+.legend { font-size: 0.82rem; color: var(--text-dim); margin-top: 12px; display: flex; gap: 18px; flex-wrap: wrap; }
+.legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: middle; }
+
+.bug-list { display: flex; flex-direction: column; gap: 14px; }
+.bug {
+  border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface-2);
+}
+.bug .bug-title { font-weight: 700; font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; margin-bottom: 4px; }
+.bug .bug-title .n { color: var(--accent); margin-right: 8px; }
+.bug p { margin: 4px 0; font-size: 0.9rem; color: var(--text-dim); }
+.bug code { background: var(--bg); padding: 1px 5px; border-radius: 4px; font-size: 0.84rem; color: var(--text); }
+
+.scatter-wrap { display: flex; gap: 8px; margin-top: 8px; }
+.scatter-axis-y { display: flex; flex-direction: column; justify-content: space-between; font-size: 0.72rem; color: var(--text-dim); width: 48px; text-align: right; padding: 4px 0; }
+.scatter-plot {
+  position: relative; flex: 1; height: 260px; border: 1px solid var(--border); border-radius: 8px;
+  background:
+    repeating-linear-gradient(to bottom, var(--border) 0, var(--border) 1px, transparent 1px, transparent 52px),
+    repeating-linear-gradient(to right, var(--border) 0, var(--border) 1px, transparent 1px, transparent 90px);
+  background-color: var(--surface-2); opacity: 1;
+}
+.scatter-dot {
+  position: absolute; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent-2); transform: translate(-50%, 50%); cursor: default;
+  border: 1px solid color-mix(in srgb, var(--accent-2) 60%, black);
+}
+.scatter-dot.ambiguous {
+  background: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, black);
+}
+.scatter-axis-x { font-size: 0.72rem; color: var(--text-dim); text-align: center; margin-top: 4px; }
+
+.tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+.tab-btn {
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text);
+  padding: 7px 14px; border-radius: 8px; font-size: 0.85rem; cursor: pointer; font-family: inherit;
+}
+.tab-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+.transcript-meta { display: flex; gap: 22px; flex-wrap: wrap; margin-bottom: 16px; font-size: 0.85rem; }
+.transcript-meta .m-label { color: var(--text-dim); }
+.transcript-meta .m-val { font-family: ui-monospace, monospace; color: var(--accent); font-weight: 700; }
+
+.turn { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+.turn .role-tag {
+  flex-shrink: 0; width: 74px; text-align: right; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.03em; padding-top: 3px;
+}
+.turn.role-assistant .role-tag { color: var(--accent); }
+.turn.role-user .role-tag { color: var(--accent-2); }
+.turn.role-tool .role-tag { color: var(--text-dim); }
+.turn-body {
+  flex: 1; padding: 8px 12px; border-radius: 8px; font-size: 0.88rem;
+  background: var(--surface-2); border: 1px solid var(--border);
+}
+.turn.role-assistant .turn-body { border-left: 3px solid var(--accent); }
+.turn.role-user .turn-body { border-left: 3px solid var(--accent-2); }
+.turn.role-tool .turn-body { border-left: 3px solid var(--text-dim); }
+.tool-call { margin-top: 6px; font-family: ui-monospace, monospace; font-size: 0.78rem; background: var(--bg); padding: 4px 8px; border-radius: 6px; color: var(--text-dim); }
+.tool-call .fn-name { color: var(--accent); font-weight: 700; }
+
+footer { text-align: center; color: var(--text-dim); font-size: 0.8rem; padding: 30px 24px 50px; }
+footer a { color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">tau2-bench 接入<span class="sub">真实全链路结果 · mock domain · Qwen2.5-3B-Instruct</span></div>
+  <nav>
+    <a href="#overview">总览</a>
+    <a href="#comparison">逐任务对比</a>
+    <a href="#bugs">踩到的真实 bug</a>
+    <a href="#profiling">目标一/二数据</a>
+    <a href="#transcripts">对话转录</a>
+  </nav>
+</header>
+
+<main>
+
+<section class="panel" id="overview">
+  <div class="panel-head">总览</div>
+  <p class="panel-desc">同一个模型、同一批 mock domain 10 个任务，分别走 tau2-bench 原生 CLI 和我们的 inspect_ai 适配器各跑一次。完整过程见 <code>docs/tau2_bench_integration_findings.md</code>。</p>
+  <div class="cards" id="overviewCards"></div>
+</section>
+
+<section class="panel" id="comparison">
+  <div class="panel-head">逐任务对比：原生 CLI vs 适配器</div>
+  <p class="panel-desc">聚合准确率两边都是 0.30，但逐条看只有 6/10 完全一致——2 条 reward 直接翻转（一升一降，刚好抵消），另外 2 条 reward 相同但对话终止方式不同。</p>
+  <table id="comparisonTable">
+    <thead>
+      <tr><th>任务</th><th>原生 reward</th><th>原生终止</th><th>适配器 reward</th><th>适配器终止</th><th>状态</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+  <div class="legend">
+    <span><span class="sw" style="background:var(--surface-2);border:1px solid var(--border)"></span>完全一致</span>
+    <span><span class="sw" style="background:var(--accent-bg)"></span>reward 相同，终止方式不同</span>
+    <span><span class="sw" style="background:var(--bad-bg)"></span>reward 不同</span>
+  </div>
+</section>
+
+<section class="panel" id="bugs">
+  <div class="panel-head">对接过程中发现并修复的真实 bug</div>
+  <p class="panel-desc">三个独立的问题，根因、影响范围、修复方式都不一样——分开记录，不是同一类坑。</p>
+  <div class="bug-list" id="bugList"></div>
+</section>
+
+<section class="panel" id="profiling">
+  <div class="panel-head">目标一/二数据：inspect_trace 真的产出了什么</div>
+  <p class="panel-desc">这些数字只来自适配器这条路径（原生 CLI 不经过 inspect_ai，没有这层数据）——证实同步/异步桥接确实让 Hooks 在 tau2 的模拟循环里正确触发了。</p>
+  <div class="cards" id="tokenLayerCards"></div>
+  <div style="margin-top:22px">
+    <div style="font-family:'LM Sans',sans-serif;font-weight:700;margin-bottom:8px">Model invocation 层：TTFT vs 计费 input token 数</div>
+    <div class="scatter-wrap">
+      <div class="scatter-axis-y" id="scatterAxisY"></div>
+      <div class="scatter-plot" id="scatterPlot"></div>
+    </div>
+    <div class="scatter-axis-x" id="scatterAxisX"></div>
+  </div>
+</section>
+
+<section class="panel" id="transcripts">
+  <div class="panel-head">真实对话转录：Agent ↔ User Simulator ↔ Environment</div>
+  <p class="panel-desc">来自原生 CLI 那次运行的完整消息记录（双控模拟——User 那一侧也是真实跑的另一个 LLM，不是数据集里的固定脚本）。挑了三条有代表性的：一条两边都过的，一条 reward 翻转的，一条两边都因为 max_steps 失败的。</p>
+  <div class="tabs" id="transcriptTabs"></div>
+  <div class="transcript-meta" id="transcriptMeta"></div>
+  <div id="transcriptBody"></div>
+</section>
+
+</main>
+
+<footer>
+  生成脚本：<code>inspect_trace/scripts/build_tau2_dashboard.py</code> · 完整发现文档：<code>docs/tau2_bench_integration_findings.md</code>
+</footer>
+
+<script>
+const DATA = __DATA_JSON__;
+
+function fmtPct(x) { return (x * 100).toFixed(0) + "%"; }
+function fmtNum(x, d) { return x === null || x === undefined ? "—" : Number(x).toFixed(d === undefined ? 0 : d); }
+
+function renderOverview() {
+  const s = DATA.summary, m = DATA.meta;
+  const cards = [
+    ["原生 CLI 准确率", fmtPct(s.native_accuracy), m.n_tasks + " 个任务"],
+    ["适配器准确率", fmtPct(s.adapter_accuracy), m.n_tasks + " 个任务"],
+    ["逐条完全一致", s.n_exact_match + "/" + m.n_tasks, "reward 和终止方式都相同"],
+    ["reward 翻转", s.n_reward_diff, "一升一降，刚好抵消聚合数字"],
+    ["reward 同/终止不同", s.n_term_diff, "对话轮数走向不一样"],
+  ];
+  document.getElementById("overviewCards").innerHTML = cards.map(([label, num, foot]) =>
+    `<div class="card"><div class="label">${label}</div><div class="num">${num}</div><div class="foot">${foot}</div></div>`
+  ).join("");
+}
+
+function renderComparison() {
+  const tbody = document.querySelector("#comparisonTable tbody");
+  tbody.innerHTML = DATA.comparison.map(r => {
+    const pill = r.match === "exact" ? '<span class="pill good">一致</span>'
+      : r.match === "reward_diff" ? '<span class="pill bad">reward 不同</span>'
+      : '<span class="pill warn">终止方式不同</span>';
+    return `<tr class="match-${r.match}">
+      <td class="mono">${r.task_id}</td>
+      <td class="mono">${fmtNum(r.native_reward, 1)}</td>
+      <td class="mono">${r.native_termination}</td>
+      <td class="mono">${fmtNum(r.adapter_reward, 1)}</td>
+      <td class="mono">${r.adapter_termination}</td>
+      <td>${pill}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderBugs() {
+  const bugs = [
+    {
+      n: "1", title: "更正此前文档的错误判断：这版 vLLM 其实支持原生 tool-calling",
+      body: `此前一直断言 <code>vllm==0.6.3.post1</code> 没有 <code>--enable-auto-tool-choice</code> 机制。这次实测：加上 <code>--tool-call-parser hermes</code> 直接打一个真实请求，返回结构良好的原生 tool_calls，完全正常——之前的判断没经过真实验证。`
+    },
+    {
+      n: "2", title: "tau2-bench 自己 to_litellm_messages() 里一个真实的多余字段",
+      body: `跑原生 CLI 多轮工具调用时必现 pydantic 校验错误。定位到 <code>tau2/utils/llm_utils.py</code> 把 tool_call 转成 dict 时多写了一个不属于 OpenAI schema 的顶层 <code>"name"</code> 字段，新版 openai SDK 严格校验直接拒绝。本地打了补丁删掉这个字段。`
+    },
+    {
+      n: "3", title: "inspect_ai 默认给工具加的 strict 字段，这版 vLLM 不认",
+      body: `inspect_ai 的 openai-api provider 无条件给每个工具加 <code>"strict"</code> 字段，vLLM 这版请求 schema 完全不认识，直接 400。修复：适配器的 agent 侧改用 <code>emulate_tools=true</code>（全项目一直在用、最熟悉的客户端文本解析路径）绕开。`
+    },
+  ];
+  document.getElementById("bugList").innerHTML = bugs.map(b =>
+    `<div class="bug"><div class="bug-title"><span class="n">Bug ${b.n}</span>${b.title}</div><p>${b.body}</p></div>`
+  ).join("");
+}
+
+function renderProfiling() {
+  const tl = DATA.token_layer, el = DATA.episode_layer;
+  const cards = [
+    ["Episodes", tl.n_episodes, "全部来自适配器这一条路径"],
+    ["真实计费 input tokens", tl.total_billed_input_tokens.toLocaleString(), "跟 .eval 日志报告数字一致"],
+    ["真实计费 output tokens", tl.total_billed_output_tokens.toLocaleString(), ""],
+    ["工具 schema 复用估算", tl.total_reused_tool_schema_tokens_estimate.toLocaleString(), (tl.total_reused_tool_schema_tokens_estimate / tl.total_reused_message_tokens_estimate).toFixed(1) + "x 于对话历史复用"],
+    ["对话历史复用估算", tl.total_reused_message_tokens_estimate.toLocaleString(), "比 BFCL 的 35x 低得多——双控对话占比更高"],
+    ["平均端到端延迟", fmtNum(el.mean_end_to_end_latency_seconds, 1) + "s", fmtNum(el.mean_n_llm_calls, 1) + " 次模型调用/episode"],
+    ["观测到真并行的 episode", el.episodes_with_observed_parallel, "跟 BFCL 一致：0"],
+  ];
+  document.getElementById("tokenLayerCards").innerHTML = cards.map(([label, num, foot]) =>
+    `<div class="card"><div class="label">${label}</div><div class="num">${num}</div><div class="foot">${foot}</div></div>`
+  ).join("");
+
+  const pts = DATA.vllm_scatter;
+  if (pts.length === 0) return;
+  const xs = pts.map(p => p.billed_input_tokens), ys = pts.map(p => p.ttft_seconds);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = 0, yMax = Math.max(...ys) * 1.1;
+  const plot = document.getElementById("scatterPlot");
+  plot.innerHTML = pts.map(p => {
+    const left = ((p.billed_input_tokens - xMin) / (xMax - xMin || 1)) * 100;
+    const bottom = ((p.ttft_seconds - yMin) / (yMax - yMin || 1)) * 100;
+    const cls = p.confidence === "exact" ? "" : " ambiguous";
+    const title = `${p.task_id}: TTFT=${p.ttft_seconds.toFixed(3)}s, input=${p.billed_input_tokens} tok, confidence=${p.confidence}`;
+    return `<div class="scatter-dot${cls}" style="left:${left}%;bottom:${bottom}%" title="${title}"></div>`;
+  }).join("");
+  document.getElementById("scatterAxisY").innerHTML = `<span>${yMax.toFixed(2)}s</span><span>${(yMax/2).toFixed(2)}s</span><span>0s</span>`;
+  document.getElementById("scatterAxisX").textContent = `计费 input tokens：${xMin} — ${xMax}`;
+}
+
+let currentTranscript = null;
+
+function renderTranscriptTabs() {
+  const ids = Object.keys(DATA.transcripts);
+  const labels = {
+    "update_task_with_message_history": "两边都过",
+    "update_task_with_initialization_actions": "reward 翻转",
+    "create_task_1": "两边都因 max_steps 失败",
+  };
+  document.getElementById("transcriptTabs").innerHTML = ids.map(id =>
+    `<button class="tab-btn" data-id="${id}">${labels[id] || id}</button>`
+  ).join("");
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => showTranscript(btn.dataset.id));
+  });
+  showTranscript(ids[0]);
+}
+
+function showTranscript(id) {
+  currentTranscript = id;
+  document.querySelectorAll(".tab-btn").forEach(b => b.classList.toggle("active", b.dataset.id === id));
+  const t = DATA.transcripts[id];
+  const ep = t.adapter_episode, tok = t.adapter_tokens;
+  document.getElementById("transcriptMeta").innerHTML = `
+    <span><span class="m-label">task_id </span><span class="m-val">${id}</span></span>
+    <span><span class="m-label">原生对话轮数 </span><span class="m-val">${t.native_messages.length}</span></span>
+    <span><span class="m-label">原生耗时 </span><span class="m-val">${fmtNum(t.native_duration, 1)}s</span></span>
+    ${ep ? `<span><span class="m-label">适配器模型调用次数 </span><span class="m-val">${ep.n_llm_calls}</span></span>` : ""}
+    ${ep ? `<span><span class="m-label">适配器端到端延迟 </span><span class="m-val">${fmtNum(ep.end_to_end_latency_seconds, 1)}s</span></span>` : ""}
+    ${tok ? `<span><span class="m-label">适配器计费 tokens </span><span class="m-val">I:${tok.billed_input_tokens} O:${tok.billed_output_tokens}</span></span>` : ""}
+  `;
+  document.getElementById("transcriptBody").innerHTML = t.native_messages.map(m => {
+    const roleLabel = m.role === "assistant" ? "AGENT" : m.role === "user" ? "USER" : "TOOL/ENV";
+    let body = m.content ? m.content.replace(/</g, "&lt;") : "<em>(空)</em>";
+    let toolHtml = "";
+    if (m.tool_calls && m.tool_calls.length) {
+      toolHtml = m.tool_calls.map(tc =>
+        `<div class="tool-call"><span class="fn-name">${tc.name}</span>(${JSON.stringify(tc.arguments)})</div>`
+      ).join("");
+    }
+    return `<div class="turn role-${m.role}">
+      <div class="role-tag">${roleLabel}</div>
+      <div class="turn-body">${body}${toolHtml}</div>
+    </div>`;
+  }).join("");
+}
+
+renderOverview();
+renderComparison();
+renderBugs();
+renderProfiling();
+renderTranscriptTabs();
+</script>
+</body>
+</html>
