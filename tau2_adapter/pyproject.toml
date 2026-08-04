@@ -24,6 +24,9 @@ dependencies = [
 inspect_trace = { path = "../inspect_trace" }
 tau2 = { path = "/home/liuyingen/code/tau2-bench" }
 
+[project.entry-points.inspect_ai]
+tau2_adapter = "tau2_adapter._registry"
+
 [project.optional-dependencies]
 dev = [
     "pytest",

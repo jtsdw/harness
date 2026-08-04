@@ -2,9 +2,16 @@
 """Builds a real-data dashboard for the tau2-bench integration (see
 docs/tau2_bench_integration_findings.md for the full write-up).
 
-Reads two real runs -- the native `tau2 run` CLI baseline (runs/tau2_native_baseline/) and our
-inspect_ai adapter (runs/tau2_adapter_full/) -- and produces a single self-contained HTML file:
-no external assets, no network calls, no server needed to view it.
+Reads three real runs:
+  - the native `tau2 run` CLI baseline (runs/tau2_native_baseline/)
+  - our inspect_ai adapter with the agent forced onto emulate_tools=true, a workaround for the
+    "strict" tool field vLLM rejects (runs/tau2_adapter_full/)
+  - our adapter again after fixing that properly (a custom ModelAPI that omits the field, see
+    tau2_adapter/_registry.py), so the agent uses real native tool-calling like the other two
+    paths (runs/tau2_adapter_native/)
+
+...and produces a single self-contained HTML file: no external assets, no network calls, no
+server needed to view it.
 
 Usage (from the inspect_trace/ project root, inside efficient-harness/):
     uv run python scripts/build_tau2_dashboard.py
@@ -24,7 +31,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 NATIVE_RESULTS = (
     REPO_ROOT / "runs/tau2_native_baseline/results_mock_baseline/results.json"
 )
-ADAPTER_RUN_DIR = REPO_ROOT / "runs/tau2_adapter_full"
+ADAPTER_EMULATE_RUN_DIR = REPO_ROOT / "runs/tau2_adapter_full"
+ADAPTER_NATIVE_RUN_DIR = REPO_ROOT / "runs/tau2_adapter_native"
 OUTPUT_PATH = REPO_ROOT / "docs/tau2_dashboard.html"
 
 LM_SANS_REGULAR = Path("/usr/share/texmf/fonts/opentype/public/lm/lmsans10-regular.otf")
@@ -59,62 +67,92 @@ def native_messages(sim: dict) -> list[dict]:
     return out
 
 
-def adapter_eval_log():
-    logs = list((ADAPTER_RUN_DIR / "logs").glob("*.eval"))
-    assert len(logs) == 1, f"expected exactly one .eval log, found {logs}"
+def adapter_eval_log(run_dir: Path):
+    logs = list((run_dir / "logs").glob("*.eval"))
+    assert len(logs) == 1, f"expected exactly one .eval log in {run_dir}, found {logs}"
     return read_eval_log(str(logs[0]), resolve_attachments=True)
 
 
-def build_comparison(native: dict[str, dict], adapter_scores: dict[str, dict]) -> list[dict]:
+def adapter_scores_from_log(log) -> dict[str, dict]:
+    scores = {}
+    for s in log.samples:
+        score = s.scores.get("tau2_reward_scorer") if s.scores else None
+        md = score.metadata if score and score.metadata else {}
+        scores[str(s.id)] = {
+            "reward": md.get("tau2_reward", 0.0),
+            "termination": md.get("tau2_termination_reason", "?"),
+        }
+    return scores
+
+
+def classify(a_reward: float, a_term: str, b_reward: float, b_term: str) -> str:
+    if a_reward == b_reward and a_term == b_term:
+        return "exact"
+    elif a_reward == b_reward:
+        return "reward_same_term_diff"
+    else:
+        return "reward_diff"
+
+
+def build_comparison(
+    native: dict[str, dict],
+    emulate_scores: dict[str, dict],
+    native_tool_scores: dict[str, dict],
+) -> list[dict]:
     rows = []
     for task_id, sim in native.items():
         n_reward = sim["reward_info"]["reward"] if sim.get("reward_info") else 0.0
         n_term = sim["termination_reason"]
-        a = adapter_scores.get(task_id, {})
-        a_reward = a.get("reward", 0.0)
-        a_term = a.get("termination", "?")
-        if n_reward == a_reward and n_term == a_term:
-            match = "exact"
-        elif n_reward == a_reward:
-            match = "reward_same_term_diff"
-        else:
-            match = "reward_diff"
+        e = emulate_scores.get(task_id, {})
+        nt = native_tool_scores.get(task_id, {})
         rows.append(
             {
                 "task_id": task_id,
                 "native_reward": n_reward,
                 "native_termination": n_term,
-                "adapter_reward": a_reward,
-                "adapter_termination": a_term,
-                "match": match,
+                "emulate_reward": e.get("reward", 0.0),
+                "emulate_termination": e.get("termination", "?"),
+                "emulate_match": classify(
+                    n_reward, n_term, e.get("reward", 0.0), e.get("termination", "?")
+                ),
+                "native_tool_reward": nt.get("reward", 0.0),
+                "native_tool_termination": nt.get("termination", "?"),
+                "native_tool_match": classify(
+                    n_reward, n_term, nt.get("reward", 0.0), nt.get("termination", "?")
+                ),
             }
         )
     rows.sort(key=lambda r: r["task_id"])
     return rows
 
 
+def summarize_match_counts(comparison: list[dict], key: str) -> dict:
+    return {
+        "exact": sum(1 for r in comparison if r[key] == "exact"),
+        "reward_same_term_diff": sum(
+            1 for r in comparison if r[key] == "reward_same_term_diff"
+        ),
+        "reward_diff": sum(1 for r in comparison if r[key] == "reward_diff"),
+    }
+
+
 def extract_all() -> dict:
     native = load_native_results()
-    log = adapter_eval_log()
+    emulate_log = adapter_eval_log(ADAPTER_EMULATE_RUN_DIR)
+    native_tool_log = adapter_eval_log(ADAPTER_NATIVE_RUN_DIR)
+    emulate_scores = adapter_scores_from_log(emulate_log)
+    native_tool_scores = adapter_scores_from_log(native_tool_log)
 
-    adapter_scores = {}
-    for s in log.samples:
-        score = s.scores.get("tau2_reward_scorer") if s.scores else None
-        md = score.metadata if score and score.metadata else {}
-        adapter_scores[str(s.id)] = {
-            "reward": md.get("tau2_reward", 0.0),
-            "termination": md.get("tau2_termination_reason", "?"),
-            "basis": md.get("tau2_reward_basis") or [],
-            "duration": md.get("tau2_duration_seconds"),
-        }
-
-    comparison = build_comparison(native, adapter_scores)
+    comparison = build_comparison(native, emulate_scores, native_tool_scores)
     n = len(comparison)
-    n_exact = sum(1 for r in comparison if r["match"] == "exact")
     native_acc = sum(1 for r in comparison if r["native_reward"] >= 1.0) / n
-    adapter_acc = sum(1 for r in comparison if r["adapter_reward"] >= 1.0) / n
+    emulate_acc = sum(1 for r in comparison if r["emulate_reward"] >= 1.0) / n
+    native_tool_acc = sum(1 for r in comparison if r["native_tool_reward"] >= 1.0) / n
 
-    trace_dir = ADAPTER_RUN_DIR / ".inspect_trace"
+    # Token/episode layer and the TTFT scatter use the native-tool-calling adapter run --
+    # it's the more apples-to-apples comparison against the native CLI baseline (both now use
+    # the same tool-calling mechanism), so it's the more meaningful one to profile in depth.
+    trace_dir = ADAPTER_NATIVE_RUN_DIR / ".inspect_trace"
     tl = token_layer.summarize_run(trace_dir)
     el = episode_layer.summarize_run(trace_dir)
 
@@ -139,14 +177,13 @@ def extract_all() -> dict:
             }
         )
 
-    # Full conversation transcripts (native path -- it's the one with a complete dual-control
-    # message list) for a representative spread: one exact pass, one reward-flip, one max_steps
-    # failure. Picked by hand from the comparison table, not auto-selected, so the examples are
-    # actually illustrative rather than whatever sorts first.
+    # Full conversation transcripts (native CLI path -- it's the one with a complete dual-control
+    # message list) for a representative spread. Picked by hand from the comparison table, not
+    # auto-selected, so the examples are actually illustrative rather than whatever sorts first.
     transcript_ids = [
-        "update_task_with_message_history",  # exact match, both passed
-        "update_task_with_initialization_actions",  # reward flip (native 0 -> adapter 1)
-        "create_task_1",  # both failed on max_steps
+        "update_task_with_message_history",  # exact match on both adapter variants
+        "update_task_1",  # emulate_tools flipped this one; native tool-calling recovered it
+        "create_task_1",  # fails on max_steps on all three paths
     ]
     transcripts = {}
     for tid in transcript_ids:
@@ -161,7 +198,7 @@ def extract_all() -> dict:
     episode_by_id = {ep.sample_id: ep for ep in el.per_episode}
     token_by_id = {t.sample_uuid: t for t in tl.per_episode}
     # token_layer keys by sample_uuid not sample_id -- join through the eval log's samples.
-    uuid_by_task_id = {str(s.id): s.uuid for s in log.samples}
+    uuid_by_task_id = {str(s.id): s.uuid for s in native_tool_log.samples}
     for tid, t in transcripts.items():
         ep = episode_by_id.get(tid)
         tok = token_by_id.get(uuid_by_task_id.get(tid))
@@ -193,10 +230,10 @@ def extract_all() -> dict:
         },
         "summary": {
             "native_accuracy": native_acc,
-            "adapter_accuracy": adapter_acc,
-            "n_exact_match": n_exact,
-            "n_reward_diff": sum(1 for r in comparison if r["match"] == "reward_diff"),
-            "n_term_diff": sum(1 for r in comparison if r["match"] == "reward_same_term_diff"),
+            "emulate_accuracy": emulate_acc,
+            "native_tool_accuracy": native_tool_acc,
+            "emulate_match_counts": summarize_match_counts(comparison, "emulate_match"),
+            "native_tool_match_counts": summarize_match_counts(comparison, "native_tool_match"),
         },
         "comparison": comparison,
         "token_layer": {

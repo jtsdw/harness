@@ -84,9 +84,9 @@ main { max-width: 1180px; margin: 0 auto; padding: 24px; }
 table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
 th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
 th { color: var(--text-dim); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
-tr.match-exact { }
-tr.match-reward_diff { background: var(--bad-bg); }
-tr.match-reward_same_term_diff { background: var(--accent-bg); }
+td.match-exact { }
+td.match-reward_diff { background: var(--bad-bg); }
+td.match-reward_same_term_diff { background: var(--accent-bg); }
 .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 0.76rem; font-weight: 600; }
 .pill.good { background: var(--good-bg); color: var(--good); }
 .pill.bad { background: var(--bad-bg); color: var(--bad); }
@@ -177,11 +177,11 @@ footer a { color: var(--text-dim); }
 </section>
 
 <section class="panel" id="comparison">
-  <div class="panel-head">逐任务对比：原生 CLI vs 适配器</div>
-  <p class="panel-desc">聚合准确率两边都是 0.30，但逐条看只有 6/10 完全一致——2 条 reward 直接翻转（一升一降，刚好抵消），另外 2 条 reward 相同但对话终止方式不同。</p>
+  <div class="panel-head">逐任务对比：原生 CLI vs 适配器（两个版本）</div>
+  <p class="panel-desc">中间一栏是发现 Bug 3 之后、还没修复前的适配器（agent 侧被迫用 <code>emulate_tools=true</code>）；右边一栏是写了自定义 ModelAPI 去掉 <code>strict</code> 字段之后的适配器（agent 侧改回真正的原生 tool-calling，跟原生 CLI 用的机制一致）。逐条完全一致的数量没变（都是 6/10）——但"reward 真正不同"（唯一真正影响准不准的分歧）从 2 条降到了 1 条，另一条差异转移成了"reward 相同、终止方式不同"（对话轮数走向不一样，但最终判分没错）。机制对齐确实让两条路径更接近了，但没有完全消除差异（dual-control 模拟本身的随机性仍然存在，见下文"复现同一路径两次结果都不同"那条发现）。</p>
   <table id="comparisonTable">
     <thead>
-      <tr><th>任务</th><th>原生 reward</th><th>原生终止</th><th>适配器 reward</th><th>适配器终止</th><th>状态</th></tr>
+      <tr><th>任务</th><th>原生 CLI</th><th>适配器·emulate_tools</th><th></th><th>适配器·原生tool-calling</th><th></th></tr>
     </thead>
     <tbody></tbody>
   </table>
@@ -200,7 +200,7 @@ footer a { color: var(--text-dim); }
 
 <section class="panel" id="profiling">
   <div class="panel-head">目标一/二数据：inspect_trace 真的产出了什么</div>
-  <p class="panel-desc">这些数字只来自适配器这条路径（原生 CLI 不经过 inspect_ai，没有这层数据）——证实同步/异步桥接确实让 Hooks 在 tau2 的模拟循环里正确触发了。</p>
+  <p class="panel-desc">这些数字来自修复后、走原生 tool-calling 的适配器路径（原生 CLI 不经过 inspect_ai，没有这层数据）——证实同步/异步桥接确实让 Hooks 在 tau2 的模拟循环里正确触发了。</p>
   <div class="cards" id="tokenLayerCards"></div>
   <div style="margin-top:22px">
     <div style="font-family:'LM Sans',sans-serif;font-weight:700;margin-bottom:8px">Model invocation 层：TTFT vs 计费 input token 数</div>
@@ -234,31 +234,35 @@ function fmtNum(x, d) { return x === null || x === undefined ? "—" : Number(x)
 
 function renderOverview() {
   const s = DATA.summary, m = DATA.meta;
+  const em = s.emulate_match_counts, nt = s.native_tool_match_counts;
   const cards = [
     ["原生 CLI 准确率", fmtPct(s.native_accuracy), m.n_tasks + " 个任务"],
-    ["适配器准确率", fmtPct(s.adapter_accuracy), m.n_tasks + " 个任务"],
-    ["逐条完全一致", s.n_exact_match + "/" + m.n_tasks, "reward 和终止方式都相同"],
-    ["reward 翻转", s.n_reward_diff, "一升一降，刚好抵消聚合数字"],
-    ["reward 同/终止不同", s.n_term_diff, "对话轮数走向不一样"],
+    ["适配器 · emulate_tools", fmtPct(s.emulate_accuracy), em.exact + "/" + m.n_tasks + " 逐条一致"],
+    ["适配器 · 原生 tool-calling", fmtPct(s.native_tool_accuracy), nt.exact + "/" + m.n_tasks + " 逐条一致"],
+    ["reward 真正不同的任务数", em.reward_diff + " → " + nt.reward_diff, "机制对齐后降低了，但没降到 0"],
+    ["逐条完全一致数", em.exact + " → " + nt.exact, "没变——差异转移到了终止方式，不是消失了"],
   ];
   document.getElementById("overviewCards").innerHTML = cards.map(([label, num, foot]) =>
     `<div class="card"><div class="label">${label}</div><div class="num">${num}</div><div class="foot">${foot}</div></div>`
   ).join("");
 }
 
+function pillFor(match) {
+  return match === "exact" ? '<span class="pill good">一致</span>'
+    : match === "reward_diff" ? '<span class="pill bad">reward 不同</span>'
+    : '<span class="pill warn">终止不同</span>';
+}
+
 function renderComparison() {
   const tbody = document.querySelector("#comparisonTable tbody");
   tbody.innerHTML = DATA.comparison.map(r => {
-    const pill = r.match === "exact" ? '<span class="pill good">一致</span>'
-      : r.match === "reward_diff" ? '<span class="pill bad">reward 不同</span>'
-      : '<span class="pill warn">终止方式不同</span>';
-    return `<tr class="match-${r.match}">
+    return `<tr>
       <td class="mono">${r.task_id}</td>
-      <td class="mono">${fmtNum(r.native_reward, 1)}</td>
-      <td class="mono">${r.native_termination}</td>
-      <td class="mono">${fmtNum(r.adapter_reward, 1)}</td>
-      <td class="mono">${r.adapter_termination}</td>
-      <td>${pill}</td>
+      <td class="mono">${fmtNum(r.native_reward, 1)}/${r.native_termination}</td>
+      <td class="mono match-${r.emulate_match}">${fmtNum(r.emulate_reward, 1)}/${r.emulate_termination}</td>
+      <td>${pillFor(r.emulate_match)}</td>
+      <td class="mono match-${r.native_tool_match}">${fmtNum(r.native_tool_reward, 1)}/${r.native_tool_termination}</td>
+      <td>${pillFor(r.native_tool_match)}</td>
     </tr>`;
   }).join("");
 }
@@ -274,8 +278,8 @@ function renderBugs() {
       body: `跑原生 CLI 多轮工具调用时必现 pydantic 校验错误。定位到 <code>tau2/utils/llm_utils.py</code> 把 tool_call 转成 dict 时多写了一个不属于 OpenAI schema 的顶层 <code>"name"</code> 字段，新版 openai SDK 严格校验直接拒绝。本地打了补丁删掉这个字段。`
     },
     {
-      n: "3", title: "inspect_ai 默认给工具加的 strict 字段，这版 vLLM 不认",
-      body: `inspect_ai 的 openai-api provider 无条件给每个工具加 <code>"strict"</code> 字段，vLLM 这版请求 schema 完全不认识，直接 400。修复：适配器的 agent 侧改用 <code>emulate_tools=true</code>（全项目一直在用、最熟悉的客户端文本解析路径）绕开。`
+      n: "3", title: "inspect_ai 默认给工具加的 strict 字段，这版 vLLM 不认（已彻底修复，不只是绕开）",
+      body: `inspect_ai 的 openai-api provider 无条件给每个工具加 <code>"strict"</code> 字段，vLLM 这版请求 schema 完全不认识，直接 400。最初用 <code>emulate_tools=true</code> 绕开，但这会让适配器 agent 侧的生成机制跟原生 CLI 不一致（文本解析 vs 真正的原生 tool-calling），污染对比。后来写了个薄的自定义 <code>ModelAPI</code> 子类（<code>tau2_adapter/_registry.py</code>，继承官方 provider，只重写 <code>tools_to_openai()</code> 去掉这个字段），走 <code>entry_points</code> 注册成新的 <code>tau2-agent-vllm</code> provider——适配器 agent 侧现在也用真正的原生 tool-calling 了，机制跟原生 CLI 完全对齐。`
     },
   ];
   document.getElementById("bugList").innerHTML = bugs.map(b =>
@@ -320,9 +324,9 @@ let currentTranscript = null;
 function renderTranscriptTabs() {
   const ids = Object.keys(DATA.transcripts);
   const labels = {
-    "update_task_with_message_history": "两边都过",
-    "update_task_with_initialization_actions": "reward 翻转",
-    "create_task_1": "两边都因 max_steps 失败",
+    "update_task_with_message_history": "三条路径都过",
+    "update_task_1": "emulate_tools 翻转过，修复后又对了",
+    "create_task_1": "三条路径都因 max_steps 失败",
   };
   document.getElementById("transcriptTabs").innerHTML = ids.map(id =>
     `<button class="tab-btn" data-id="${id}">${labels[id] || id}</button>`

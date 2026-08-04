@@ -42,7 +42,7 @@ litellm.BadRequestError: OpenAIException - 5 validation errors for ValidatorIter
 
 修复：本地直接删掉这个多余字段（我们完全拥有这份本地克隆，不打算走上游 PR，这不是"绕过问题"，是"改对了"）。改动位置：`/home/liuyingen/code/tau2-bench/src/tau2/utils/llm_utils.py`，`to_litellm_messages()` 函数。
 
-### Bug 3（我们适配器自己的问题）：inspect_ai 默认给工具加的 `strict` 字段，这版 vLLM 不认
+### Bug 3：inspect_ai 默认给工具加的 `strict` 字段，这版 vLLM 不认（后来彻底修复，不只是绕开）
 
 改用 Bug 2 的修复之后，tau2 原生 CLI 已经能正常跑通原生 tool-calling。但换成我们的适配器（走 `inspect_ai.model.generate()`）时，遇到了第三个、性质完全不同的问题：
 
@@ -52,7 +52,20 @@ litellm.BadRequestError: OpenAIException - 5 validation errors for ValidatorIter
 
 `inspect_ai` 的 `openai-api` provider（`model/_providers/openai_compatible.py:398`）**无条件**给每个工具的 `function` 加一个 `"strict"` 字段（`tool["function"]["strict"] = self.strict_tools`，没有 `if` 判断，`-M strict_tools=false` 也只是把值设成 `false`，字段本身还在），这是给"结构化输出"场景用的新字段，vLLM 0.6.3.post1 的请求 schema 完全不认识，直接 400。tau2 自己的工具构造代码没有这个字段，所以原生路径不受影响，只有 inspect_ai 这条路径会撞上。
 
-修复：适配器这边把 agent 侧模型也切回 `emulate_tools=true`（走我们全项目一直在用的客户端文本解析路径），彻底绕开这个字段问题——这也是我们最熟悉、验证最多的路径。**代价**：agent 侧现在是 `emulate_tools`（文本解析 tool_calls），user simulator + 原生基线是真正的原生 tool-calling——两条路径底层生成 tool_calls 的具体机制不同，这是一个真实存在、需要如实说明的不对称，不是掩盖不谈。好在两者最终都会被规整成结构化的 `ToolCall` 对象（`model_output_to_tau2_assistant_message()` 转换函数不关心底层是怎么解析出来的），所以对 tau2 环境/评估器来说是透明的,不影响评分逻辑。
+**第一版处理（临时绕开）**：适配器这边把 agent 侧模型切回 `emulate_tools=true`（走我们全项目一直在用的客户端文本解析路径）。能跑通，但留下一个真实不对称：agent 侧是 `emulate_tools`（文本解析 tool_calls），user simulator + 原生基线是真正的原生 tool-calling——两条路径底层生成 tool_calls 的机制不一样，会污染"同一个 bench 能不能跑出同样效果"这个对比。
+
+**后来的正式修复**：不接受这个不对称，直接解决掉。写了一个薄的自定义 `ModelAPI` 子类（`tau2_adapter/_registry.py`），继承官方的 `OpenAICompatibleAPI`，只重写 `tools_to_openai()`——调 `super()` 拿到官方构造好的工具列表，然后把每个工具的 `strict` 字段删掉，其余原样不动：
+
+```python
+class NoStrictOpenAICompatibleAPI(OpenAICompatibleAPI):
+    def tools_to_openai(self, tools: list[ToolInfo]) -> list[dict]:
+        openai_tools = super().tools_to_openai(tools)
+        for tool in openai_tools:
+            tool["function"].pop("strict", None)
+        return openai_tools
+```
+
+通过 `[project.entry-points.inspect_ai]` 注册成新的 provider `tau2-agent-vllm`（跟 `inspect_trace` 注册 Hooks 用的是同一套 entry_points 机制），模型字符串换成 `tau2-agent-vllm/vllm/Qwen/Qwen2.5-3B-Instruct`。这样适配器的 agent 侧也用上了真正的原生 tool-calling，跟原生 CLI 的机制完全对齐——不用改 inspect_ai 装好的包本身，也不用继续用 `emulate_tools` 凑合。
 
 ## Hooks 触发验证：核心技术假设成立
 
@@ -73,32 +86,38 @@ litellm.BadRequestError: OpenAIException - 5 validation errors for ValidatorIter
 
 ## 全量运行结果对比：mock domain 10 个任务
 
-两条路径都用同一个本地模型（`Qwen/Qwen2.5-3B-Instruct`，本地 vLLM，`temperature=0.0`），agent 和 user simulator 都指向同一个服务。
+三条路径都用同一个本地模型（`Qwen/Qwen2.5-3B-Instruct`，本地 vLLM，`temperature=0.0`），agent 和 user simulator 都指向同一个服务。"适配器·emulate_tools"是 Bug 3 修复前的版本，"适配器·原生tool-calling"是修复后的版本（agent 侧改用 `tau2-agent-vllm` provider）。
 
-| task_id | 原生 CLI reward | 原生 termination | 适配器 reward | 适配器 termination | 一致？ |
+| task_id | 原生 CLI | 适配器·emulate_tools | 一致？ | 适配器·原生tool-calling | 一致？ |
 |---|---|---|---|---|---|
-| create_task_1 | 0.0 | max_steps | 0.0 | max_steps | ✅ |
-| create_task_1_nl_eval | 0.0 | max_steps | 0.0 | max_steps | ✅ |
-| create_task_1_with_env_assertions | 0.0 | max_steps | 0.0 | max_steps | ✅ |
-| impossible_task_1 | 0.0 | max_steps | 0.0 | max_steps | ✅ |
-| update_task_1 | **1.0** | user_stop | **0.0** | user_stop | ❌ reward 不同 |
-| update_task_with_history_and_env_assertions | 1.0 | user_stop | 1.0 | user_stop | ✅ |
-| update_task_with_initialization_actions | **0.0** | max_steps | **1.0** | user_stop | ❌ reward 不同 |
-| update_task_with_initialization_data | 0.0 | max_steps | 0.0 | user_stop | ⚠️ reward 同，termination 不同 |
-| update_task_with_message_history | 1.0 | user_stop | 1.0 | user_stop | ✅ |
-| update_task_with_user_tools | 0.0 | user_stop | 0.0 | max_steps | ⚠️ reward 同，termination 不同 |
+| create_task_1 | 0.0/max_steps | 0.0/max_steps | ✅ | 0.0/max_steps | ✅ |
+| create_task_1_nl_eval | 0.0/max_steps | 0.0/max_steps | ✅ | 0.0/max_steps | ✅ |
+| create_task_1_with_env_assertions | 0.0/max_steps | 0.0/max_steps | ✅ | 0.0/user_stop | ⚠️ termination 不同 |
+| impossible_task_1 | 0.0/max_steps | 0.0/max_steps | ✅ | 0.0/user_stop | ⚠️ termination 不同 |
+| update_task_1 | **1.0**/user_stop | **0.0**/user_stop | ❌ reward 不同 | **1.0**/user_stop | ✅ |
+| update_task_with_history_and_env_assertions | 1.0/user_stop | 1.0/user_stop | ✅ | 1.0/user_stop | ✅ |
+| update_task_with_initialization_actions | **0.0**/max_steps | **1.0**/user_stop | ❌ reward 不同 | **1.0**/user_stop | ❌ reward 不同 |
+| update_task_with_initialization_data | 0.0/max_steps | 0.0/user_stop | ⚠️ termination 不同 | 0.0/max_steps | ✅ |
+| update_task_with_message_history | 1.0/user_stop | 1.0/user_stop | ✅ | 1.0/user_stop | ✅ |
+| update_task_with_user_tools | 0.0/user_stop | 0.0/max_steps | ⚠️ termination 不同 | 0.0/max_steps | ⚠️ termination 不同 |
 
-聚合结果：**两条路径的 accuracy 都是 0.30（3/10）**——但逐条看，只有 6/10 完全一致（reward 和 termination 都相同），2/10 的 reward 直接翻转（一个从 1→0，一个从 0→1，恰好互相抵消，聚合数字才"看起来一样"），另外 2/10 reward 相同但对话轮数/终止方式不同。
+聚合 accuracy：原生 CLI 0.30，emulate_tools 版适配器 0.30，原生 tool-calling 版适配器 **0.40**——这次不再"巧合相同"，是真的不一样（`update_task_with_initialization_actions` 这条任务原生 CLI 判 0 分，两版适配器都判 1 分）。
 
-**一个更进一步的诚实发现**：原生 CLI 本身，同一个任务重复跑两次也不完全一致——单独跑 `create_task_1`（阶段 3 那次单任务验证）得到 reward=1.0，但在这次 10 任务批跑里，同一个 `create_task_1` 却是 reward=0.0（`max_steps`）。也就是说，**"原生 vs 适配器"观察到的差异，不能全部归因于"harness 不一样"**——哪怕两次都走一模一样的原生 CLI 代码路径，`temperature=0.0` 也没能让 dual-control 模拟完全确定：user simulator 的具体措辞、vLLM 批处理调度的时序，都会让对话轨迹产生真实的、非 harness 造成的随机性。
+修复前后对比，两个真正有意义的数字：
+- **逐条完全一致数：6/10 → 6/10，没变**。
+- **reward 真正不同（唯一直接影响准不准的分歧）：2/10 → 1/10，减半**。差异没消失，但从"判分都错"降级成了"判分对但对话轮数/终止方式不同"——机制对齐确实让两条路径更接近了。
 
-## "同一个 bench，能不能跑出同样效果"——实证结论
+**一个更进一步的诚实发现**：原生 CLI 本身，同一个任务重复跑两次也不完全一致——单独跑 `create_task_1`（阶段 3 那次单任务验证）得到 reward=1.0，但在 10 任务批跑里，同一个 `create_task_1` 却是 reward=0.0（`max_steps`）。也就是说，**"原生 vs 适配器"观察到的差异，不能全部归因于"harness 不一样"**——哪怕两次都走一模一样的原生 CLI 代码路径，`temperature=0.0` 也没能让 dual-control 模拟完全确定：user simulator 的具体措辞、vLLM 批处理调度的时序，都会让对话轨迹产生真实的、非 harness 造成的随机性。
 
-回答上一轮那个问题，现在有真数据了，不是推测：
+## "同一个 bench，能不能跑出同样效果"——实证结论（含修复后的更新）
 
-**不完全能，但也不是"完全跑不出"**。10 个任务里 6 个逐条一致，聚合准确率巧合地相同（0.30），但个体层面 2/10 direction 相反的翻转说明这不是"稳定可复现"的一致,是运气抵消。根因分层：
-- 一部分差异（至少 2/10 那种 reward 相同但 termination 不同的情况）大概率来自 dual-control 模拟本身固有的非确定性（user simulator 措辞、批处理时序），不是我们适配器的问题——这条从"原生 CLI 自己都不能精确复现自己"这个事实反推出来。
-- 另一部分差异可能来自适配器和原生路径两侧机制上的真实不对称（agent 侧 `emulate_tools=true` 文本解析 vs user simulator 原生 tool-calling，见 Bug 3），但这次的数据量（10 个任务、每边各跑一次）不足以把这部分和上面的固有随机性彻底分开——需要多次重复跑（比如每条路径跑 5 次取分布）才能定量拆解,这次没有做到那个规模,如实说明这是当前证据的边界,不是回避。
+回答"接不接得上不同 evaluator"那一轮问题之后，做了实际验证，不是继续推测：
+
+**不完全能，但机制对齐确实能缩小差距，缩小不到零**。三个信息放在一起看：
+
+1. **evaluator 从来不是分歧来源**——两条适配器路径用的都是 tau2 自己的 `run_simulation()`/`evaluate_simulation()`，跟原生 CLI 完全同一份代码，这一点上一轮就已经确认，这次修复过程再次印证：换掉 agent 侧生成机制、不碰 evaluator，结果就发生了变化，说明分歧确实不出在评分这一层。
+2. **agent 侧生成机制的不对称是可以修的，修完确实有效果**——`reward_diff` 从 2/10 降到 1/10。这部分差异是真实存在、可归因、可消除（哪怕没消除干净）的"harness 引入的差异"。
+3. **dual-control 模拟本身的随机性是修不掉的**——原生 CLI 自己都不能精确复现自己（`create_task_1` 两次不同结果），机制完全对齐之后剩下的 1/10 分歧（`update_task_with_initialization_actions`）、以及 3/10 的 termination 不同，大概率就落在这一类里，不是哪个 harness 的问题。要严格证明这一点、把两类误差彻底拆开，需要真正的固定轨迹重放（对应我们项目自己的目标四）或者多次重复实验取分布，这次的数据规模（每条路径各跑一次）还做不到,如实说明是证据边界，不是回避。
 
 ## 已知限制（如实列出）
 
@@ -107,6 +126,7 @@ litellm.BadRequestError: OpenAIException - 5 validation errors for ValidatorIter
 - user simulator 的模型调用完全不经过 `inspect_trace`，只追踪被测 agent 一侧——这是设计选择，不是遗漏，但意味着"整个 episode 的完整 token/延迟画像"不包含 user simulator 那一半的真实开销。
 - 本地 3B 模型演"客服 agent"和"用户"两个角色，能力都偏弱（10 个任务里 7 个没通过，多数因为超出 `max_steps`）——这是模型能力限制，不是集成本身的问题，但让"两条路径到底有没有真正对齐"这个问题在这批小样本上更难看清（弱模型的行为方差本来就大）。
 - 只跑了 `temperature=0.0`、单次重复——没有做多次重复实验来定量拆分"harness 差异"和"固有随机性"两类误差来源。
+- 修复 Bug 3 之后 agent 侧机制对齐了，但 user simulator 现在仍然是 tau2 自己独立的一次 LiteLLM 调用，跟适配器 agent 侧那次 inspect_ai 调用是两条完全独立的代码路径，请求构造细节（比如超时/重试策略）不保证逐字段一致——机制对齐目前只做到了"工具调用这一层"，不是"整条调用链路"。
 
 ## 复现命令
 
@@ -139,7 +159,7 @@ TAU2_DATA_DIR=/home/liuyingen/code/tau2-bench/data uv run tau2 run \
   --num-trials 1 --num-tasks 10 --max-steps 20 --save results_mock_baseline
 ```
 
-适配器路径（agent 侧走 `emulate_tools=true`，见 Bug 3）：
+适配器路径 · `emulate_tools=true` 版（Bug 3 修复前）：
 ```bash
 cd /home/liuyingen/code/efficient-harness/tau2_adapter/src/tau2_adapter
 TAU2_DATA_DIR=/home/liuyingen/code/tau2-bench/data \
@@ -153,10 +173,24 @@ uv run --project /home/liuyingen/code/efficient-harness/tau2_adapter inspect eva
   --log-dir /home/liuyingen/code/efficient-harness/runs/tau2_adapter_full/logs
 ```
 
-原始数据留档：`runs/tau2_native_baseline/`（原生 CLI 的 `results_1task`/`results_mock_baseline`）、`runs/tau2_adapter_full/`（适配器路径的 `.eval` 日志 + `inspect_trace` JSONL）。
+适配器路径 · 原生 tool-calling 版（Bug 3 修复后，用 `tau2_adapter/_registry.py` 注册的自定义 provider）：
+```bash
+cd /home/liuyingen/code/efficient-harness/tau2_adapter/src/tau2_adapter
+TAU2_DATA_DIR=/home/liuyingen/code/tau2-bench/data \
+TAU2_USER_MODEL="openai/Qwen/Qwen2.5-3B-Instruct" \
+TAU2_USER_API_BASE="http://localhost:8000/v1" TAU2_USER_API_KEY="not-needed" \
+VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" \
+INSPECT_TRACE_DIR="/home/liuyingen/code/efficient-harness/runs/tau2_adapter_native/.inspect_trace" \
+uv run --project /home/liuyingen/code/efficient-harness/tau2_adapter inspect eval task.py \
+  --model "tau2-agent-vllm/vllm/Qwen/Qwen2.5-3B-Instruct" \
+  --max-connections 1 \
+  --log-dir /home/liuyingen/code/efficient-harness/runs/tau2_adapter_native/logs
+```
+
+原始数据留档：`runs/tau2_native_baseline/`（原生 CLI 的 `results_1task`/`results_mock_baseline`）、`runs/tau2_adapter_full/`（`emulate_tools` 版适配器的 `.eval` 日志 + `inspect_trace` JSONL）、`runs/tau2_adapter_native/`（原生 tool-calling 版适配器，同上）。
 
 ## 相关文件
 
-- 适配器代码：`/home/liuyingen/code/efficient-harness/tau2_adapter/`（`agent.py` 同步/异步桥接、`solver.py` 驱动 tau2 模拟、`dataset.py`/`task.py` 组装、`convert.py` 消息/工具类型转换）
+- 适配器代码：`/home/liuyingen/code/efficient-harness/tau2_adapter/`（`agent.py` 同步/异步桥接、`solver.py` 驱动 tau2 模拟、`dataset.py`/`task.py` 组装、`convert.py` 消息/工具类型转换、`_registry.py` 注册 Bug 3 修复用的自定义 `tau2-agent-vllm` provider）
 - tau2-bench 本地 bug 修复：`/home/liuyingen/code/tau2-bench/src/tau2/utils/llm_utils.py`（本地补丁，不打算走上游 PR）
 - 目标一实现（`inspect_trace`）：`/home/liuyingen/code/efficient-harness/inspect_trace/`
