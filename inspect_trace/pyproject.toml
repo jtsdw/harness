@@ -20,6 +20,11 @@ dependencies = [
     "tiktoken",
     "pydantic",
     "anyio",
+    # inspect_ai treats provider SDKs as optional (only ships them via its own dev extras).
+    # Every real benchmark we run goes through an OpenAI-compatible endpoint (hosted DeepSeek
+    # via the `openai` provider, or local vLLM via `openai-api`) -- both need this installed,
+    # so it's a real dependency here, not a dev-only one.
+    "openai>=2.45.0",
 ]
 
 [project.entry-points.inspect_ai]
