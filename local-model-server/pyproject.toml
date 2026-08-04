@@ -1,0 +1,27 @@
+[project]
+name = "local-model-server"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "jtsdw", email = "1455062025@qq.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "pyairports>=0.0.1",
+    "torchaudio==2.4.0",
+    "transformers==4.46.3",
+    "vllm==0.6.3.post1",
+]
+
+[project.scripts]
+local-model-server = "local_model_server:main"
+
+[tool.uv.sources]
+# The real pyairports==0.0.1 on PyPI ships no code (metadata-only wheel), which breaks
+# outlines' `from pyairports.airports import AIRPORT_LIST` import that vllm's guided-decoding
+# path pulls in on every chat completion request. See vendor/pyairports/ for the shim.
+pyairports = { path = "vendor/pyairports" }
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"

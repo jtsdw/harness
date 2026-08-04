@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyairports"
+version = "0.0.1+local"
+description = "Local shim replacing the broken/empty pyairports 0.0.1 PyPI package, backed by airportsdata."
+requires-python = ">=3.9"
+dependencies = ["airportsdata"]
+
+[tool.setuptools.packages.find]
+include = ["pyairports*"]

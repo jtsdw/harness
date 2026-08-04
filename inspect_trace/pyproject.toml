@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["inspect_trace*"]
+
+[project]
+name = "inspect_trace"
+version = "0.1.0"
+description = "Goal-1 execution-trace derived facts for inspect_ai: repeated-prefill detection, segment-level token estimation, and retry attempt grouping, via the official inspect_ai Hooks extension mechanism."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT License" }
+dependencies = [
+    "inspect_ai",
+    "inspect_evals",
+    "httpx",
+    "tiktoken",
+    "pydantic",
+    "anyio",
+]
+
+[project.entry-points.inspect_ai]
+inspect_trace = "inspect_trace._registry"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "mypy",
+    "ruff",
+]
+
+[tool.ruff]
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+  "E",      # pycodestyle errors
+  "W",      # pycodestyle warnings
+  "F",      # flake8
+  "D",      # pydocstyle
+  "I",      # isort
+  "B",      # flake8-bugbear
+  "SIM101", # duplicate isinstance
+  "DTZ",
+  "PLE",     # pylint errors
+]
+ignore = [
+  "E203",
+  "E501",
+  "D10",
+  "D212",
+  "D415",
+  "B006",
+  "B007",
+  "B008",
+  "B009",
+  "B010",
+  "B011",
+  "B017",
+  "B027",
+  "B028",
+  "B039",
+  "B904",
+  "B905",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

@@ -1,0 +1,28 @@
+# Python-generated files (both sub-projects)
+**/__pycache__/
+**/*.py[oc]
+**/*.egg-info/
+**/build/
+**/dist/
+**/wheels/
+
+# Virtual environments (each sub-project manages its own)
+**/.venv/
+
+# Tool caches
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+
+# inspect_trace's own derived JSONL output (only meaningful alongside a specific run's .eval log)
+**/.inspect_trace/
+
+# Runtime logs from local-model-server's serve.sh, and stray .eval logs that running
+# inspect_trace's test suite / doc examples from inspect_trace/ writes to ./logs by default
+local-model-server/logs/
+inspect_trace/logs/
+
+# Experiment data: real .eval logs + inspect_trace JSONL from real benchmark runs.
+# Not tracked -- it's large and regenerable, but NOT disposable: see runs/ in
+# deployment_migration_guide.md, it must be copied by hand when migrating servers.
+/runs/

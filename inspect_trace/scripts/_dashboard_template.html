@@ -1,0 +1,1030 @@
+<title>目标一实测面板</title>
+<style>
+@font-face {
+  font-family: "LM Sans";
+  src: url(data:font/otf;base64,__LM_REGULAR__) format("opentype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "LM Sans";
+  src: url(data:font/otf;base64,__LM_BOLD__) format("opentype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --bg: #f6f4ee;
+  --surface: #ffffff;
+  --surface-2: #ece8de;
+  --border: #d9d3c4;
+  --text: #201e1a;
+  --text-dim: #6b6459;
+  --accent: #b56a28;
+  --accent-2: #2f7d78;
+  --good: #3f7d4c;
+  --bad: #a83358;
+  --accent-bg: rgba(181, 106, 40, 0.10);
+  --good-bg: rgba(63, 125, 76, 0.12);
+  --bad-bg: rgba(168, 51, 88, 0.12);
+  --shadow: 0 1px 2px rgba(20, 18, 14, 0.06), 0 8px 24px -12px rgba(20, 18, 14, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14161c; --surface: #1c1f28; --surface-2: #262a35; --border: #333846;
+    --text: #e9e6df; --text-dim: #9b9fac; --accent: #d98e4a; --accent-2: #5fa8a3;
+    --good: #6fae7c; --bad: #c9587a;
+    --accent-bg: rgba(217, 142, 74, 0.14); --good-bg: rgba(111, 174, 124, 0.14); --bad-bg: rgba(201, 88, 122, 0.16);
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161c; --surface: #1c1f28; --surface-2: #262a35; --border: #333846;
+  --text: #e9e6df; --text-dim: #9b9fac; --accent: #d98e4a; --accent-2: #5fa8a3;
+  --good: #6fae7c; --bad: #c9587a;
+  --accent-bg: rgba(217, 142, 74, 0.14); --good-bg: rgba(111, 174, 124, 0.14); --bad-bg: rgba(201, 88, 122, 0.16);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -12px rgba(0, 0, 0, 0.5);
+}
+:root[data-theme="light"] {
+  --bg: #f6f4ee; --surface: #ffffff; --surface-2: #ece8de; --border: #d9d3c4;
+  --text: #201e1a; --text-dim: #6b6459; --accent: #b56a28; --accent-2: #2f7d78;
+  --good: #3f7d4c; --bad: #a83358;
+  --accent-bg: rgba(181, 106, 40, 0.10); --good-bg: rgba(63, 125, 76, 0.12); --bad-bg: rgba(168, 51, 88, 0.12);
+  --shadow: 0 1px 2px rgba(20, 18, 14, 0.06), 0 8px 24px -12px rgba(20, 18, 14, 0.12);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px 96px; }
+a { color: var(--accent); }
+[hidden] { display: none !important; }
+
+header.top {
+  position: sticky; top: 0; z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+.top-inner {
+  max-width: 1040px; margin: 0 auto; padding: 14px 24px;
+  display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+}
+.brand { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 1.05rem; }
+.brand small {
+  display: block; font-weight: 400; font-size: 0.72rem; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px;
+}
+.brand a { color: inherit; text-decoration: none; }
+nav.jump { display: flex; gap: 4px; flex-wrap: wrap; }
+nav.jump a {
+  font-size: 0.8rem; color: var(--text-dim); text-decoration: none;
+  padding: 5px 10px; border-radius: 6px; border: 1px solid transparent; white-space: nowrap;
+}
+nav.jump a:hover { color: var(--text); border-color: var(--border); background: var(--surface-2); }
+
+.hero { padding: 40px 0 8px; }
+.eyebrow {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--accent); font-weight: 700; margin: 0 0 10px;
+}
+h1 {
+  font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700;
+  font-size: 2rem; line-height: 1.15; margin: 0 0 12px; text-wrap: balance;
+}
+.hero p.lede { max-width: 66ch; color: var(--text-dim); font-size: 1rem; margin: 0 0 6px; }
+.meta-row {
+  display: flex; gap: 18px; flex-wrap: wrap; margin-top: 20px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 0.78rem; color: var(--text-dim);
+}
+.meta-row b { color: var(--text); font-weight: 600; }
+
+.chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 28px 0 8px; }
+@media (max-width: 720px) { .chips { grid-template-columns: repeat(2, 1fr); } }
+.chip { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
+.chip .req-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); font-weight: 600; }
+.chip .req-name { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 0.98rem; margin: 4px 0 10px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; padding: 3px 9px 3px 7px; border-radius: 999px; }
+.pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pill.good { background: var(--good-bg); color: var(--good); }
+.pill.warn { background: var(--accent-bg); color: var(--accent); }
+.pill.bad { background: var(--bad-bg); color: var(--bad); }
+.chip .verdict { margin-top: 10px; font-size: 0.82rem; color: var(--text-dim); }
+
+section.panel { margin-top: 52px; scroll-margin-top: 76px; }
+.panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.panel-num { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; color: var(--accent); font-weight: 700; font-size: 0.85rem; }
+h2 { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-size: 1.3rem; font-weight: 700; margin: 0; text-wrap: balance; }
+.panel-desc { color: var(--text-dim); max-width: 68ch; font-size: 0.92rem; margin: 8px 0 20px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 22px 24px; box-shadow: var(--shadow); }
+.callout { border: 1px solid var(--border); border-left: 3px solid var(--accent); background: var(--accent-bg); border-radius: 8px; padding: 14px 16px; font-size: 0.88rem; color: var(--text); margin-top: 16px; }
+.callout b { color: var(--accent); }
+.req-quote { font-size: 0.82rem; color: var(--text-dim); background: var(--surface-2); border-radius: 6px; padding: 8px 12px; margin: 0 0 16px; border-left: 2px solid var(--border); }
+.req-quote b { color: var(--text); font-weight: 600; }
+
+.subhead { display: flex; align-items: baseline; justify-content: space-between; margin: 28px 0 12px; flex-wrap: wrap; gap: 4px; }
+.subhead:first-child { margin-top: 0; }
+.subhead h3 { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-size: 0.95rem; font-weight: 700; margin: 0; }
+.subhead .doc-term { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.72rem; color: var(--text-dim); }
+
+/* ---------- dataset overview ---------- */
+
+.ds-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 10px; }
+@media (max-width: 720px) { .ds-summary { grid-template-columns: repeat(2, 1fr); } }
+.ds-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); }
+.ds-stat .num { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.ds-stat .label { font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+table.sample-table { width: 100%; border-collapse: collapse; }
+table.sample-table th {
+  text-align: left; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-dim); padding: 0 10px 8px; border-bottom: 1px solid var(--border);
+}
+table.sample-table td { padding: 11px 10px; font-size: 0.85rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.sample-table tr:last-child td { border-bottom: none; }
+table.sample-table tr.sample-row { cursor: pointer; }
+table.sample-table tr.sample-row:hover { background: var(--surface-2); }
+td.sid { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.76rem; color: var(--text-dim); white-space: nowrap; }
+td.sinput { color: var(--text); max-width: 340px; }
+td.snum { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-variant-numeric: tabular-nums; text-align: right; }
+td.sarrow { text-align: right; color: var(--text-dim); }
+
+.score-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.score-badge.pass { background: var(--good-bg); color: var(--good); }
+.score-badge.fail { background: var(--bad-bg); color: var(--bad); }
+
+.flag-badge { font-size: 0.7rem; padding: 2px 7px; border-radius: 5px; background: var(--surface-2); color: var(--text-dim); white-space: nowrap; }
+.flag-badge.hot { background: var(--accent-bg); color: var(--accent); }
+
+.table-scroll { overflow-x: auto; }
+
+/* ---------- sample detail ---------- */
+
+.back-link {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem;
+  color: var(--text-dim); text-decoration: none; margin-bottom: 18px;
+}
+.back-link:hover { color: var(--accent); }
+
+.sample-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 6px; }
+.sample-head .sid-big { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.82rem; color: var(--text-dim); }
+.sample-input-full { max-width: 74ch; color: var(--text); font-size: 0.95rem; margin: 6px 0 4px; }
+.explanation-box {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 0.75rem; color: var(--text-dim); background: var(--surface-2); border-radius: 8px;
+  padding: 10px 12px; margin-top: 12px; white-space: pre-wrap; word-break: break-word;
+}
+
+/* ---------- stacked bars (需求一) ---------- */
+
+.stepgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 640px) { .stepgrid { grid-template-columns: repeat(2, 1fr); } }
+.step-col { display: flex; flex-direction: column; gap: 8px; }
+.step-col .step-label { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.72rem; color: var(--text-dim); text-align: center; }
+.stackbar { display: flex; flex-direction: column; height: 110px; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+.seg { width: 100%; }
+.seg.system_template { background: var(--text-dim); }
+.seg.tool_schema, .seg.reasoning { background: var(--accent-2); }
+.seg.conversation, .seg.tool_calling { background: var(--accent); }
+.seg.final_response { background: var(--good); }
+.seg.empty { background: transparent; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px 20px; margin-top: 18px; font-size: 0.78rem; color: var(--text-dim); }
+.legend .item { display: flex; align-items: center; gap: 6px; }
+.legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+.legend .sw.system_template { background: var(--text-dim); }
+.legend .sw.tool_schema, .legend .sw.reasoning { background: var(--accent-2); }
+.legend .sw.conversation, .legend .sw.tool_calling { background: var(--accent); }
+.legend .sw.final_response { background: var(--good); }
+
+.model-layer-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.model-layer-col { display: flex; flex-direction: column; gap: 6px; }
+.model-bar { display: flex; height: 20px; border-radius: 5px; overflow: hidden; border: 1px solid var(--border); }
+.model-bar .in { background: var(--accent-2); }
+.model-bar .out { background: var(--good); }
+.model-bar-nums { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-variant-numeric: tabular-nums; font-size: 0.72rem; color: var(--text-dim); display: flex; justify-content: space-between; }
+.model-bar-nums .in-n { color: var(--accent-2); }
+.model-bar-nums .out-n { color: var(--good); }
+
+/* ---------- transcript ---------- */
+
+.transcript { display: flex; flex-direction: column; gap: 0; }
+.tstep { border: 1px solid var(--border); border-radius: 10px; margin-bottom: 12px; overflow: hidden; }
+.tstep-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; background: var(--surface-2); cursor: pointer; user-select: none; gap: 10px; }
+.tstep-head .tstep-title { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 0.85rem; white-space: nowrap; }
+.tstep-head .tstep-sub { font-size: 0.72rem; color: var(--text-dim); font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; }
+.tstep-head .chev { font-size: 0.7rem; color: var(--text-dim); transition: transform 0.15s ease; margin-left: auto; }
+.tstep.open .chev { transform: rotate(90deg); }
+.tstep-body { display: none; padding: 14px; }
+.tstep.open .tstep-body { display: block; }
+.tmsg { display: grid; grid-template-columns: 116px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--border); font-size: 0.82rem; }
+.tmsg:last-child { border-bottom: none; }
+.tmsg-tags { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.tmsg-role { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); }
+.tmsg-status { font-size: 0.66rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; }
+.tmsg-status.new { background: var(--accent-bg); color: var(--accent); }
+.tmsg-status.reused { background: var(--good-bg); color: var(--good); }
+.tmsg-status.dup_in_step { background: var(--bad-bg); color: var(--bad); }
+.tmsg-text { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.78rem; color: var(--text); white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+.tmsg-text.empty { color: var(--text-dim); font-style: italic; }
+.toutput { margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+.toutput .toutput-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); font-weight: 700; margin-bottom: 8px; }
+.toutput-block { font-size: 0.8rem; margin-bottom: 6px; }
+.toutput-block .k { color: var(--text-dim); font-size: 0.72rem; margin-right: 6px; }
+.toutput-block code { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; color: var(--accent-2); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: 0.78rem; }
+
+/* ---------- 需求二 ---------- */
+
+.reuse-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.reuse-table th, .reuse-table td { text-align: right; padding: 8px 10px; font-size: 0.85rem; border-bottom: 1px solid var(--border); }
+.reuse-table th:first-child, .reuse-table td:first-child { text-align: left; }
+.reuse-table th { color: var(--text-dim); font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.reuse-table td.mono, .reuse-table th { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; }
+
+/* ---------- 需求三 topology ---------- */
+
+.timeline-stats { display: flex; gap: 28px; margin-bottom: 16px; flex-wrap: wrap; }
+
+.timeline-wrap { margin-bottom: 6px; }
+.timeline-track {
+  position: relative;
+  height: 46px;
+  background: var(--surface-2);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.timeline-track.lanes-2 { height: 84px; }
+.timeline-track.lanes-3 { height: 122px; }
+
+.timeline-block {
+  position: absolute;
+  top: 6px;
+  height: 34px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 0.68rem;
+  color: var(--bg);
+  white-space: nowrap;
+  overflow: hidden;
+  cursor: default;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--surface-2) 60%, transparent);
+}
+.timeline-block.model { background: var(--accent-2); }
+.timeline-block.tool { background: var(--accent); }
+.timeline-block.tool.err { background: var(--bad); }
+
+.timeline-axis {
+  display: flex;
+  justify-content: space-between;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  margin-top: 6px;
+}
+
+.timeline-legend { display: flex; flex-wrap: wrap; gap: 14px 20px; margin-top: 14px; font-size: 0.78rem; color: var(--text-dim); }
+.timeline-legend .item { display: flex; align-items: center; gap: 6px; }
+.timeline-legend .sw { width: 10px; height: 10px; border-radius: 3px; }
+.timeline-legend .sw.model { background: var(--accent-2); }
+.timeline-legend .sw.tool { background: var(--accent); }
+.timeline-legend .sw.err { background: var(--bad); }
+
+/* ---------- 需求四 ---------- */
+
+.err-summary { display: flex; gap: 28px; margin-bottom: 22px; flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; }
+.stat .num { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 1.7rem; font-variant-numeric: tabular-nums; }
+.stat .label { font-size: 0.74rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+
+table.errtable { width: 100%; border-collapse: collapse; margin-top: 6px; }
+table.errtable th { text-align: left; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-dim); padding: 0 10px 8px; border-bottom: 1px solid var(--border); }
+table.errtable td { padding: 10px; font-size: 0.82rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.errtable tr:last-child td { border-bottom: none; }
+td.fn { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; white-space: nowrap; color: var(--accent-2); }
+td.msg { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; color: var(--text-dim); font-size: 0.76rem; line-height: 1.5; }
+
+.chain-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 24px; }
+@media (max-width: 780px) { .chain-grid { grid-template-columns: 1fr; } }
+.chain { background: var(--surface-2); border-radius: 10px; padding: 14px 16px; border-top: 3px solid var(--border); }
+.chain.clean { border-top-color: var(--good); }
+.chain.err { border-top-color: var(--bad); }
+.chain .chain-label { font-size: 0.72rem; color: var(--text-dim); margin-bottom: 12px; }
+.chain-step { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; font-size: 0.76rem; padding: 8px 0; border-bottom: 1px dashed var(--border); }
+.chain-step:last-child { border-bottom: none; }
+.chain-step .k { color: var(--text-dim); }
+.chain-step .v { color: var(--text); }
+.chain-step .v.hot { color: var(--accent); font-weight: 600; }
+.chain-step .v.bad { color: var(--bad); }
+.chain-arrow { text-align: center; color: var(--text-dim); font-size: 0.8rem; padding: 2px 0; }
+
+/* ---------- live_parallel simple detail ---------- */
+
+.lp-block { margin-bottom: 20px; }
+.lp-block .lp-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-dim); margin-bottom: 8px; }
+
+/* ---------- 目标二 ---------- */
+
+.goal2-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 8px; }
+@media (max-width: 780px) { .goal2-two-col { grid-template-columns: 1fr; } }
+
+.goal2-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; box-shadow: var(--shadow); }
+.goal2-card .goal2-card-title { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 0.95rem; margin-bottom: 14px; }
+.goal2-stat-list { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+.goal2-stat { display: flex; flex-direction: column; }
+.goal2-stat .num { font-family: "LM Sans", ui-sans-serif, system-ui, sans-serif; font-weight: 700; font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.goal2-stat .label { font-size: 0.7rem; color: var(--text-dim); }
+
+.scatter-wrap { display: flex; gap: 8px; }
+.scatter-axis-y {
+  display: flex; flex-direction: column; justify-content: space-between;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 0.66rem; color: var(--text-dim); text-align: right; width: 48px; padding: 4px 0;
+}
+.scatter-plot {
+  position: relative; flex: 1; height: 220px;
+  background:
+    linear-gradient(var(--border) 1px, transparent 1px) 0 0 / 100% 25%,
+    linear-gradient(90deg, var(--border) 1px, transparent 1px) 0 0 / 20% 100%;
+  background-color: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 8px;
+  opacity: 1;
+}
+.scatter-dot {
+  position: absolute; width: 8px; height: 8px; margin: -4px 0 0 -4px;
+  border-radius: 50%; background: var(--accent); cursor: default;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+.scatter-dot.ambiguous { background: var(--text-dim); }
+.scatter-axis-x {
+  margin: 6px 0 0 56px;
+  display: flex; justify-content: space-between;
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace;
+  font-size: 0.66rem; color: var(--text-dim);
+}
+
+footer { margin-top: 64px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 0.8rem; color: var(--text-dim); }
+footer code { font-family: ui-monospace, "SF Mono", "Cascadia Code", "DejaVu Sans Mono", Consolas, monospace; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 0.85em; }
+</style>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand"><a href="#/">目标一实测面板</a><small>efficient-harness · inspect_trace</small></div>
+    <nav class="jump" id="topNav">
+      <a href="#/">数据集总览</a>
+      <a href="#goal2">目标二：三层成本归因</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <div id="view-dataset">
+    <section class="hero">
+      <p class="eyebrow">真实 BFCL 数据 · 非合成样例</p>
+      <h1>数据集总览 → 逐条样本详情</h1>
+      <p class="lede">
+        跑在本地 vLLM（Qwen2.5-3B-Instruct，emulate_tools）上的真实评测结果。点一行样本，进去看那一条的完整执行过程——
+        具体上下文、token 归因、执行拓扑、action parsing 全部scope到那一条。
+      </p>
+    </section>
+
+    <div class="chips" id="chips"></div>
+
+    <section class="panel" id="ds-mt">
+      <div class="panel-head"><h2>BFCL multi_turn_base</h2></div>
+      <p class="panel-desc">真实调用 <code>execute_tools()</code> 的 category——有完整的 tool 执行、执行拓扑、action parsing 可看。</p>
+      <div class="ds-summary" id="mtSummary"></div>
+      <div class="card">
+        <div class="table-scroll">
+          <table class="sample-table" id="mtTable"></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="ds-lp">
+      <div class="panel-head"><h2>BFCL live_parallel</h2></div>
+      <p class="panel-desc">single-turn AST 打分 category——从不调用 <code>execute_tools()</code>，没有 ToolEvent，作为结构性对照组。</p>
+      <div class="ds-summary" id="lpSummary"></div>
+      <div class="card">
+        <div class="table-scroll">
+          <table class="sample-table" id="lpTable"></table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="goal2">
+      <div class="panel-head"><h2>目标二：三层成本归因</h2></div>
+      <p class="panel-desc">token 层 / episode 层复用左边两个数据集的真实记录，不需要额外采集；model invocation 层来自单独一次真实的 vLLM <code>/metrics</code> 验证 run（见下方说明），因为只有那次 run 打开了这层实时采集。</p>
+
+      <div class="subhead"><h3>Token 层</h3><span class="doc-term">真实计费 + 复用/浪费统计，逐数据集</span></div>
+      <div class="goal2-two-col" id="tokenLayerGrid"></div>
+
+      <div class="subhead"><h3>Episode 层</h3><span class="doc-term">成功率 / 耗时 / 成本，逐数据集</span></div>
+      <div class="goal2-two-col" id="episodeLayerGrid"></div>
+
+      <div class="subhead"><h3>Model invocation 层</h3><span class="doc-term" id="modelInvocationSubhead">来自单独的验证 run</span></div>
+      <div class="card">
+        <div class="err-summary" id="miSummary"></div>
+        <div class="subhead" style="margin-top:22px"><h3 style="font-size:0.85rem">TTFT vs 真实输入 token 数</h3><span class="doc-term">每个点是一次真实调用 · 悬停看具体数值</span></div>
+        <div class="scatter-wrap">
+          <div class="scatter-plot" id="ttftScatter"></div>
+          <div class="scatter-axis-y" id="ttftAxisY"></div>
+        </div>
+        <div class="scatter-axis-x" id="ttftAxisX"></div>
+        <div class="callout" id="miCallout"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="view-sample" hidden></div>
+
+  <footer>
+    复现命令见 <code>src/inspect_trace/scripts/run_bfcl_benchmark.sh</code>；完整分析见
+    <code>doc/efficient-harness/goal1_r3_r4_real_benchmark_findings.md</code>。数据直接取自真实
+    <code>.eval</code> 日志与 <code>inspect_trace</code> 落盘的 JSONL 文件，含真实 <code>bfcl_scorer</code> 评测结果。
+  </footer>
+
+</div>
+
+<script id="data" type="application/json">__DATA_JSON__</script>
+<script>
+const DATA = JSON.parse(document.getElementById("data").textContent);
+
+function escapeHtml(s) {
+  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function scoreBadge(score) {
+  if (score === null || score === undefined) return `<span class="score-badge">—</span>`;
+  return score === 1
+    ? `<span class="score-badge pass">✓ pass</span>`
+    : `<span class="score-badge fail">✗ fail</span>`;
+}
+
+// ==================== 数据集总览 ====================
+
+function renderDatasetView() {
+  const mt = DATA.multi_turn_base;
+  const lp = DATA.live_parallel;
+
+  const agg = DATA.aggregate;
+  const errRate = agg.total_action_calls ? ((agg.total_action_errors / agg.total_action_calls) * 100).toFixed(0) : "0";
+  const chipDefs = [
+    { label: "需求一", name: "完整 token 级记录", status: "warn", pill: "工作正常 · 有限制",
+      verdict: "输入/输出归因都算对了，但 system template 检测在 emulate_tools 场景下失效；final_response 有时会把解析失败的残留文本误标进来。" },
+    { label: "需求二", name: "新增 vs 复用上下文", status: "good", pill: "验证通过",
+      verdict: "工具 schema：step 1 全新，step 2 起全部复用，逐样本核对完全正确。" },
+    { label: "需求三", name: "执行拓扑", status: "warn", pill: "并行/重试均未观测到",
+      verdict: `拓扑重建、等待时间、join key 全部正确；${agg.total_tool_calls} 次真实 tool call 里 ${agg.multi_call_stages} 次一轮提议多个调用，但 ${agg.observed_parallel_stages} 次被判定为真并行；${DATA.retries.total_requests_all_runs} 次历史真实请求里 ${DATA.retries.requests_with_retry} 次触发重试。` },
+    { label: "需求四", name: "action parsing 追踪", status: "good", pill: "捕获多类真实错误",
+      verdict: `${agg.total_action_calls} 次真实调用里 ${agg.total_action_errors} 次解析/校验失败（约 ${errRate}%）；observation 回填链路逐条追溯验证通过。` },
+  ];
+  const chipsEl = document.getElementById("chips");
+  chipsEl.innerHTML = "";
+  chipDefs.forEach((c) => {
+    const div = document.createElement("div");
+    div.className = "chip";
+    div.innerHTML = `
+      <div class="req-label">${c.label}</div>
+      <div class="req-name">${c.name}</div>
+      <span class="pill ${c.status}">${c.pill}</span>
+      <div class="verdict">${c.verdict}</div>
+    `;
+    chipsEl.appendChild(div);
+  });
+
+  document.getElementById("mtSummary").innerHTML = `
+    <div class="ds-stat"><div class="num">${mt.n_samples}</div><div class="label">样本数</div></div>
+    <div class="ds-stat"><div class="num" style="color:${mt.n_correct > 0 ? "var(--good)" : "var(--bad)"}">${mt.n_correct}/${mt.n_samples}</div><div class="label">评测通过</div></div>
+    <div class="ds-stat"><div class="num">${DATA.retries.total_requests_all_runs}</div><div class="label">历史全部真实请求</div></div>
+    <div class="ds-stat"><div class="num">${DATA.retries.requests_with_retry}</div><div class="label">其中触发重试</div></div>
+  `;
+  const mtBody = mt.samples.map((s) => `
+    <tr class="sample-row" data-href="#/sample/multi_turn_base/${s.uuid}">
+      <td class="sid">${s.id}</td>
+      <td class="sinput">${escapeHtml(s.input_text)}</td>
+      <td>${scoreBadge(s.score)}</td>
+      <td class="snum">${s.total_model_calls}</td>
+      <td class="snum">${s.topology.total_tool_calls}</td>
+      <td class="snum" style="color:${s.errors.filter(e => e.error_present).length > 0 ? "var(--bad)" : "var(--text-dim)"}">${s.errors.filter(e => e.error_present).length}</td>
+      <td>${s.topology.linear ? `<span class="flag-badge">linear</span>` : `<span class="flag-badge hot">non-linear</span>`}</td>
+      <td class="sarrow">→</td>
+    </tr>
+  `).join("");
+  document.getElementById("mtTable").innerHTML = `
+    <thead><tr><th>sample</th><th>输入</th><th>score</th><th>steps</th><th>tool calls</th><th>错误</th><th>拓扑</th><th></th></tr></thead>
+    <tbody>${mtBody}</tbody>
+  `;
+
+  document.getElementById("lpSummary").innerHTML = `
+    <div class="ds-stat"><div class="num">${lp.n_samples}</div><div class="label">样本数</div></div>
+    <div class="ds-stat"><div class="num" style="color:${lp.n_correct > lp.n_samples / 2 ? "var(--good)" : "var(--bad)"}">${lp.n_correct}/${lp.n_samples}</div><div class="label">评测通过</div></div>
+    <div class="ds-stat"><div class="num">0</div><div class="label">ToolEvent（结构性）</div></div>
+    <div class="ds-stat"><div class="num">single-turn</div><div class="label">solver 类型</div></div>
+  `;
+  const lpBody = lp.samples.map((s) => `
+    <tr class="sample-row" data-href="#/sample/live_parallel/${s.uuid}">
+      <td class="sid">${s.id}</td>
+      <td class="sinput">${escapeHtml(s.input_text)}</td>
+      <td>${scoreBadge(s.score)}</td>
+      <td class="snum">${s.tool_calls.length}</td>
+      <td class="snum">${s.n_tools_declared}</td>
+      <td><span class="flag-badge">无 ToolEvent</span></td>
+      <td></td>
+      <td class="sarrow">→</td>
+    </tr>
+  `).join("");
+  document.getElementById("lpTable").innerHTML = `
+    <thead><tr><th>sample</th><th>输入</th><th>score</th><th>提议的 tool_calls</th><th>可选工具数</th><th>结构</th><th></th><th></th></tr></thead>
+    <tbody>${lpBody}</tbody>
+  `;
+
+  document.querySelectorAll("tr.sample-row").forEach((tr) => {
+    tr.addEventListener("click", () => { location.hash = tr.dataset.href.slice(1); });
+  });
+
+  renderGoal2();
+}
+
+// ==================== 目标二：三层成本归因 ====================
+
+function fmtNum(n, digits = 0) {
+  if (n === null || n === undefined) return "–";
+  return n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits });
+}
+
+function goal2Card(title, rows) {
+  return `
+    <div class="goal2-card">
+      <div class="goal2-card-title">${title}</div>
+      <div class="goal2-stat-list">
+        ${rows.map(([label, val]) => `<div class="goal2-stat"><span class="num">${val}</span><span class="label">${label}</span></div>`).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderGoal2() {
+  const g2 = DATA.goal2;
+  const tl = g2.token_layer;
+  const el = g2.episode_layer;
+
+  document.getElementById("tokenLayerGrid").innerHTML =
+    goal2Card("multi_turn_base（200 样本）", [
+      ["真实计费 input tokens", fmtNum(tl.multi_turn_base.total_billed_input_tokens)],
+      ["真实计费 output tokens", fmtNum(tl.multi_turn_base.total_billed_output_tokens)],
+      ["复用对话消息 tokens", fmtNum(tl.multi_turn_base.total_reused_message_tokens_estimate)],
+      ["复用工具 schema tokens", fmtNum(tl.multi_turn_base.total_reused_tool_schema_tokens_estimate)],
+      ["重试浪费 output tokens", fmtNum(tl.multi_turn_base.total_retry_wasted_output_tokens_estimate)],
+    ]) +
+    goal2Card("live_parallel（15 样本）", [
+      ["真实计费 input tokens", fmtNum(tl.live_parallel.total_billed_input_tokens)],
+      ["真实计费 output tokens", fmtNum(tl.live_parallel.total_billed_output_tokens)],
+      ["复用对话消息 tokens", fmtNum(tl.live_parallel.total_reused_message_tokens_estimate)],
+      ["复用工具 schema tokens", fmtNum(tl.live_parallel.total_reused_tool_schema_tokens_estimate)],
+      ["重试浪费 output tokens", fmtNum(tl.live_parallel.total_retry_wasted_output_tokens_estimate)],
+    ]);
+
+  document.getElementById("episodeLayerGrid").innerHTML =
+    goal2Card("multi_turn_base（200 样本）", [
+      ["success rate", (el.multi_turn_base.success_rate * 100).toFixed(1) + "%"],
+      ["平均 end-to-end 耗时", el.multi_turn_base.mean_end_to_end_latency_seconds.toFixed(1) + "s"],
+      ["平均 LLM 调用次数", el.multi_turn_base.mean_n_llm_calls.toFixed(2)],
+      ["平均 tool 调用次数", el.multi_turn_base.mean_n_tool_calls.toFixed(2)],
+      ["总重试次数", fmtNum(el.multi_turn_base.total_retries)],
+      ["总成本（本地 vLLM）", "$" + el.multi_turn_base.total_cost_usd.toFixed(2)],
+    ]) +
+    goal2Card("live_parallel（15 样本）", [
+      ["success rate", (el.live_parallel.success_rate * 100).toFixed(1) + "%"],
+      ["平均 end-to-end 耗时", el.live_parallel.mean_end_to_end_latency_seconds.toFixed(2) + "s"],
+      ["平均 LLM 调用次数", el.live_parallel.mean_n_llm_calls.toFixed(2)],
+      ["平均 tool 调用次数", el.live_parallel.mean_n_tool_calls.toFixed(2)],
+      ["总重试次数", fmtNum(el.live_parallel.total_retries)],
+      ["总成本（本地 vLLM）", "$" + el.live_parallel.total_cost_usd.toFixed(2)],
+    ]);
+
+  const mi = g2.model_invocation;
+  document.getElementById("modelInvocationSubhead").textContent =
+    `来自单独的验证 run（${mi.run_dir}，8 样本，${mi.n_calls} 次真实调用）`;
+  document.getElementById("miSummary").innerHTML = [
+    ["调用次数", fmtNum(mi.n_calls), "var(--text)"],
+    ["精确归因占比", ((mi.n_exact / mi.n_calls) * 100).toFixed(0) + "%", mi.n_exact === mi.n_calls ? "var(--good)" : "var(--accent)"],
+    ["平均 TTFT", (mi.mean_ttft_seconds * 1000).toFixed(0) + "ms", "var(--text)"],
+    ["平均 ITL", (mi.mean_itl_seconds * 1000).toFixed(1) + "ms/token", "var(--text)"],
+  ].map(([label, val, color]) => `<div class="stat"><span class="num" style="color:${color}">${val}</span><span class="label">${label}</span></div>`).join("");
+
+  const calls = mi.calls.filter((c) => c.ttft_seconds !== null && c.billed_input_tokens !== null);
+  const xs = calls.map((c) => c.billed_input_tokens);
+  const ys = calls.map((c) => c.ttft_seconds);
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = 0, yMax = Math.max(...ys) * 1.1;
+
+  const scatter = document.getElementById("ttftScatter");
+  scatter.innerHTML = "";
+  calls.forEach((c) => {
+    const xPct = xMax > xMin ? ((c.billed_input_tokens - xMin) / (xMax - xMin)) * 100 : 50;
+    const yPct = 100 - (c.ttft_seconds / yMax) * 100;
+    const dot = document.createElement("div");
+    dot.className = "scatter-dot" + (c.attribution_confidence !== "exact" ? " ambiguous" : "");
+    dot.style.left = xPct + "%";
+    dot.style.top = yPct + "%";
+    dot.title = `input_tokens=${c.billed_input_tokens} ttft=${(c.ttft_seconds * 1000).toFixed(0)}ms itl=${(c.itl_seconds_avg * 1000).toFixed(1)}ms/token confidence=${c.attribution_confidence}`;
+    scatter.appendChild(dot);
+  });
+
+  document.getElementById("ttftAxisY").innerHTML =
+    `<span>${yMax.toFixed(1)}s</span><span>${(yMax / 2).toFixed(1)}s</span><span>0s</span>`;
+  document.getElementById("ttftAxisX").innerHTML =
+    `<span>${fmtNum(xMin)} input tokens</span><span>${fmtNum(xMax)} input tokens</span>`;
+
+  document.getElementById("miCallout").innerHTML =
+    `<b>如实说明：</b>这层数据来自一次单独的 8 样本验证 run（跟左边两个数据集不是同一次跑的），
+     不是全量 200 样本——真正接入全量数据需要用带 <code>vllm_metrics.py</code> 的版本重新跑一次
+     <code>multi_turn_base</code> 全量（约 1 小时）。这里的点数不多，但已经能看出真实的
+     prefill-scaling 关系：输入 token 越多，TTFT 越高，跟 goal2_real_validation_findings.md
+     里记录的结论一致。灰色点（如果有）代表 <code>attribution_confidence != "exact"</code>，
+     这批数据里预期不会出现（全部 <code>MAX_CONNECTIONS=1</code> 串行采集）。`;
+}
+
+// ==================== 样本详情：multi_turn_base ====================
+
+function stackedBars(container, steps, fields, maxVal) {
+  container.innerHTML = "";
+  steps.forEach((s) => {
+    const col = document.createElement("div");
+    col.className = "step-col";
+    const total = fields.reduce((sum, [key]) => sum + s[key], 0);
+    const bar = document.createElement("div");
+    bar.className = "stackbar";
+    bar.title = fields.map(([key]) => `${key}=${s[key]}`).join(" · ");
+    const pad = document.createElement("div");
+    pad.className = "seg empty";
+    pad.style.height = (maxVal ? (1 - total / maxVal) * 100 : 100) + "%";
+    bar.appendChild(pad);
+    fields.forEach(([key, cls]) => {
+      const seg = document.createElement("div");
+      seg.className = "seg " + cls;
+      seg.style.height = (maxVal ? (s[key] / maxVal) * 100 : 0) + "%";
+      bar.appendChild(seg);
+    });
+    col.appendChild(bar);
+    const lab = document.createElement("div");
+    lab.className = "step-label";
+    lab.textContent = "step " + s.step;
+    col.appendChild(lab);
+    container.appendChild(col);
+  });
+}
+
+function renderTimeline(sample) {
+  const events = sample.timeline || [];
+  const subhead = document.getElementById("timelineSubhead");
+  const track = document.getElementById("timelineTrack");
+  const axis = document.getElementById("timelineAxis");
+  const stats = document.getElementById("timelineStats");
+  const callout = document.getElementById("timelineCallout");
+
+  subhead.textContent = `tool call → 等待 → model generate，真实时间比例 · sample = ${sample.id}`;
+  track.innerHTML = "";
+  axis.innerHTML = "";
+  track.className = "timeline-track";
+
+  if (!events.length) {
+    track.innerHTML = `<div style="padding:12px;color:var(--text-dim);font-size:0.85rem">这条样本没有产生任何 model/tool 事件。</div>`;
+    stats.innerHTML = "";
+    callout.innerHTML = "";
+    return;
+  }
+
+  const t0 = events[0].start;
+  const tEnd = Math.max(...events.map((e) => e.end));
+  const totalDuration = tEnd - t0;
+  const MIN_WIDTH_PCT = 1.2;
+
+  // greedy lane assignment: place each event in the first lane whose previous
+  // block already ended before this one starts (only matters if real overlap occurs).
+  const laneEnds = [];
+  const placed = events.map((e) => {
+    let lane = laneEnds.findIndex((end) => end <= e.start);
+    if (lane === -1) { lane = laneEnds.length; laneEnds.push(e.end); }
+    else { laneEnds[lane] = e.end; }
+    return { ...e, lane };
+  });
+  const nLanes = laneEnds.length;
+  track.classList.add(`lanes-${Math.min(nLanes, 3)}`);
+
+  placed.forEach((e) => {
+    const leftPct = totalDuration ? ((e.start - t0) / totalDuration) * 100 : 0;
+    const widthPct = Math.max(MIN_WIDTH_PCT, totalDuration ? ((e.end - e.start) / totalDuration) * 100 : 100);
+    const block = document.createElement("div");
+    block.className = "timeline-block " + e.type + (e.error ? " err" : "");
+    block.style.left = leftPct + "%";
+    block.style.width = widthPct + "%";
+    block.style.top = (6 + e.lane * 38) + "px";
+    const durationMs = ((e.end - e.start) * 1000).toFixed(1);
+    block.title = `${e.type === "model" ? "model generate" : "tool: " + e.label}\nstart=${(e.start - t0).toFixed(3)}s duration=${durationMs}ms${e.error ? "\nerror=" + e.error : ""}`;
+    block.textContent = e.type === "model" ? "generate" : e.label;
+    track.appendChild(block);
+  });
+
+  axis.innerHTML = `<span>0s</span><span>${(totalDuration / 2).toFixed(1)}s</span><span>${totalDuration.toFixed(1)}s</span>`;
+
+  const modelWork = events.filter((e) => e.type === "model").reduce((a, e) => a + (e.working_time || 0), 0);
+  const toolWork = events.filter((e) => e.type === "tool").reduce((a, e) => a + (e.working_time || 0), 0);
+  let gap = 0;
+  for (let i = 1; i < events.length; i++) gap += Math.max(0, events[i].start - events[i - 1].end);
+
+  const statRows = [
+    ["episode 总时长", totalDuration.toFixed(2) + "s"],
+    ["model 计算耗时", modelWork.toFixed(2) + "s"],
+    ["tool 计算耗时", (toolWork * 1000).toFixed(1) + "ms"],
+    ["空档等待（重叠部分之间的真实 gap）", (gap * 1000).toFixed(1) + "ms"],
+  ];
+  if (sample.episode) {
+    statRows.push(
+      ["目标二 · concurrency savings", sample.episode.concurrency_savings_seconds.toFixed(3) + "s"],
+      ["目标二 · 成本（本地 vLLM）", "$" + sample.episode.cost_usd.toFixed(2)],
+    );
+  }
+  stats.innerHTML = statRows
+    .map(([label, val]) => `<div class="stat"><span class="num" style="font-size:1.1rem">${val}</span><span class="label">${label}</span></div>`).join("");
+
+  const overlapped = nLanes > 1;
+  callout.innerHTML = overlapped
+    ? `<b>观测到真并行：</b>这条样本里有 tool call 的时间窗口真实重叠，画成了 ${nLanes} 条并排的泳道。`
+    : `<b>如实报告：</b>这条样本从第一个 model generate 到最后一个 tool call，<b>空档等待只有 ${(gap * 1000).toFixed(1)}ms</b>——本地 vLLM + 本地 tool 执行几乎无缝衔接，tool call 相对 model generate（每次 ~2-3s）在这条时间线上只是很窄的一小段（已设最小宽度，否则会细到看不见）。真实网络多服务部署下等待时间会明显得多。`;
+}
+
+function renderMultiTurnSample(sample) {
+  const root = document.getElementById("view-sample");
+
+  root.innerHTML = `
+    <a class="back-link" href="#/">← 返回数据集总览</a>
+    <div class="sample-head">
+      <div>
+        <div class="sid-big">${sample.id} · ${sample.uuid_short}</div>
+        <p class="sample-input-full">${escapeHtml(sample.input_text)}</p>
+      </div>
+      ${scoreBadge(sample.score)}
+    </div>
+    ${sample.explanation ? `<div class="explanation-box">${escapeHtml(sample.explanation)}</div>` : ""}
+
+    <section class="panel" id="req1">
+      <div class="panel-head"><span class="panel-num">01</span><h2>完整的 token 级记录</h2></div>
+      <p class="req-quote">需求文档原文：<b>真实（计费）的 prefill/decode-等价 token 数</b> + <b>按 pipeline 阶段的 token 归因</b>，覆盖 <b>model 层面</b> 和 <b>agent 层面</b> 两个层面。</p>
+      <div class="card">
+        <div class="subhead"><h3>model 层面</h3><span class="doc-term">原始的输入 vs 输出拆分 · 真实计费值</span></div>
+        <div class="model-layer-row" id="modelLayerRow"></div>
+        <div class="subhead"><h3>pipeline 阶段归因 · 输入侧</h3><span class="doc-term">system template / tool schema / conversation</span></div>
+        <div class="stepgrid" id="attrInChart"></div>
+        <div class="subhead"><h3>agent 层面</h3><span class="doc-term">ReAct 阶段：reasoning / tool calling / final response</span></div>
+        <div class="stepgrid" id="attrOutChart"></div>
+        <div class="legend">
+          <span class="item"><span class="sw system_template"></span>system template</span>
+          <span class="item"><span class="sw tool_schema"></span>tool schema / reasoning</span>
+          <span class="item"><span class="sw conversation"></span>conversation / tool calling</span>
+          <span class="item"><span class="sw final_response"></span>final response</span>
+        </div>
+        <div class="subhead"><h3>具体上下文内容</h3><span class="doc-term">上下文如何逐步膨胀 · 真实转录，点击展开每一步</span></div>
+        <div class="transcript" id="transcript"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="req2">
+      <div class="panel-head"><span class="panel-num">02</span><h2>每一步的新增 vs 复用上下文</h2></div>
+      <p class="req-quote">需求文档原文：每一步的 context，必须能判定<b>新增</b>与<b>复用</b>——system template 要能单独统计。</p>
+      <div class="card"><div class="table-scroll"><table class="reuse-table" id="reuseTable"></table></div></div>
+    </section>
+
+    <section class="panel" id="req3">
+      <div class="panel-head"><span class="panel-num">03</span><h2>执行拓扑</h2></div>
+      <p class="req-quote">需求文档原文：重建执行结构——<b>并行</b> tool call、<b>等待</b>、<b>重试</b>，全部画在同一条时间线上，不要分开看。</p>
+      <div class="card">
+        <div class="subhead"><h3>完整执行时间线</h3><span class="doc-term" id="timelineSubhead">tool call → 等待 → model generate，真实时间比例</span></div>
+        <div class="timeline-stats" id="timelineStats"></div>
+        <div class="timeline-wrap">
+          <div class="timeline-track" id="timelineTrack"></div>
+          <div class="timeline-axis" id="timelineAxis"></div>
+        </div>
+        <div class="timeline-legend">
+          <span class="item"><span class="sw model"></span>model generate</span>
+          <span class="item"><span class="sw tool"></span>tool call（成功）</span>
+          <span class="item"><span class="sw err"></span>tool call（解析/校验失败）</span>
+        </div>
+        <div class="callout" id="timelineCallout"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="req4">
+      <div class="panel-head"><span class="panel-num">04</span><h2>action parsing 与 observation 回填追踪</h2></div>
+      <p class="req-quote">需求文档原文：<b>解析/校验失败要留痕</b>，<b>observation 回填</b>的过程要能追溯。</p>
+      <div class="card">
+        <div class="err-summary" id="errSummary"></div>
+        <div class="table-scroll"><table class="errtable"><thead><tr><th>函数</th><th>错误类型</th><th>原始错误信息</th></tr></thead><tbody id="errTableBody"></tbody></table></div>
+        <div class="subhead"><h3>observation 回填追溯</h3><span class="doc-term">tool_call_id 作为 join key</span></div>
+        <div class="chain-grid" id="chainGrid"></div>
+      </div>
+    </section>
+  `;
+
+  // 需求一
+  const attr = sample.attribution;
+  const maxIn = Math.max(1, ...attr.map((s) => s.system_template + s.tool_schema + s.conversation));
+  const maxOut = Math.max(1, ...attr.map((s) => s.reasoning + s.tool_calling + s.final_response));
+  stackedBars(document.getElementById("attrInChart"), attr, [["system_template", "system_template"], ["tool_schema", "tool_schema"], ["conversation", "conversation"]], maxIn);
+  stackedBars(document.getElementById("attrOutChart"), attr, [["reasoning", "reasoning"], ["tool_calling", "tool_calling"], ["final_response", "final_response"]], maxOut);
+
+  const modelLayerRow = document.getElementById("modelLayerRow");
+  const maxTotal = Math.max(1, ...attr.map((s) => (s.billed_input || 0) + (s.billed_output || 0)));
+  modelLayerRow.innerHTML = "";
+  attr.forEach((s) => {
+    const col = document.createElement("div");
+    col.className = "model-layer-col";
+    const inPct = ((s.billed_input || 0) / maxTotal) * 100;
+    const outPct = ((s.billed_output || 0) / maxTotal) * 100;
+    col.innerHTML = `
+      <div class="model-bar"><div class="in" style="width:${inPct}%"></div><div class="out" style="width:${outPct}%"></div></div>
+      <div class="model-bar-nums"><span class="in-n">in ${s.billed_input ?? "–"}</span><span class="out-n">out ${s.billed_output ?? "–"}</span></div>
+      <div class="step-label">step ${s.step}</div>
+    `;
+    modelLayerRow.appendChild(col);
+  });
+
+  // 具体上下文
+  const transcriptEl = document.getElementById("transcript");
+  transcriptEl.innerHTML = "";
+  sample.transcript.forEach((step) => {
+    const div = document.createElement("div");
+    div.className = "tstep" + (step.step === 1 ? " open" : "");
+    const newCount = step.messages.filter((m) => m.status === "new").length;
+    const reusedCount = step.messages.filter((m) => m.status === "reused").length;
+    const head = document.createElement("div");
+    head.className = "tstep-head";
+    head.innerHTML = `<span class="tstep-title">step ${step.step}</span><span class="tstep-sub">${step.messages.length} 条消息 · ${newCount} new / ${reusedCount} reused</span><span class="chev">▶</span>`;
+    head.addEventListener("click", () => div.classList.toggle("open"));
+    const body = document.createElement("div");
+    body.className = "tstep-body";
+    step.messages.forEach((m) => {
+      const row = document.createElement("div");
+      row.className = "tmsg";
+      row.innerHTML = `
+        <div class="tmsg-tags"><span class="tmsg-role">${m.role}${m.function ? " · " + m.function : ""}</span><span class="tmsg-status ${m.status}">${m.status}</span></div>
+        <div class="tmsg-text ${m.text ? "" : "empty"}">${m.text ? escapeHtml(m.text) : "(空)"}</div>
+      `;
+      body.appendChild(row);
+    });
+    const out = document.createElement("div");
+    out.className = "toutput";
+    let outHtml = `<div class="toutput-label">→ 模型输出（这一步真实产生的内容）</div>`;
+    if (step.reasoning) outHtml += `<div class="toutput-block"><span class="k">reasoning</span>${escapeHtml(step.reasoning)}</div>`;
+    if (step.tool_calls.length) outHtml += step.tool_calls.map((tc) => `<div class="toutput-block"><span class="k">tool call</span><code>${escapeHtml(tc.function)}(${escapeHtml(JSON.stringify(tc.arguments))})</code></div>`).join("");
+    if (step.final_text) outHtml += `<div class="toutput-block"><span class="k">final text</span>${escapeHtml(step.final_text)}</div>`;
+    if (!step.reasoning && !step.tool_calls.length && !step.final_text) outHtml += `<div class="toutput-block" style="color:var(--text-dim)">（这一步没有可见输出内容）</div>`;
+    out.innerHTML = outHtml;
+    body.appendChild(out);
+    div.appendChild(head);
+    div.appendChild(body);
+    transcriptEl.appendChild(div);
+  });
+
+  // 需求二
+  const pf = sample.prefill;
+  let rows = `<thead><tr><th>step</th><th>new msgs</th><th>reused msgs</th><th>system template msgs</th><th>tools new</th><th>tools reused</th><th>tools total</th></tr></thead><tbody>`;
+  pf.forEach((r) => {
+    rows += `<tr>
+      <td class="mono">${r.step}</td><td class="mono">${r.new_messages}</td><td class="mono">${r.reused_messages}</td>
+      <td class="mono" style="color:var(--text-dim)">${r.system_template_messages}</td>
+      <td class="mono" style="color:${r.tools_new > 0 ? "var(--accent)" : "var(--text-dim)"}">${r.tools_new}</td>
+      <td class="mono" style="color:${r.tools_reused > 0 ? "var(--good)" : "var(--text-dim)"}">${r.tools_reused}</td>
+      <td class="mono">${r.tools_total}</td>
+    </tr>`;
+  });
+  document.getElementById("reuseTable").innerHTML = rows + "</tbody>";
+
+  // 需求三：完整执行时间线（model generate / tool call 画在同一条时间轴上）
+  renderTimeline(sample);
+
+  // 需求四
+  const errSummary = document.getElementById("errSummary");
+  const errored = sample.errors.filter((e) => e.error_present);
+  errSummary.innerHTML = [
+    ["total", sample.errors.length, "总调用次数"],
+    ["errors", errored.length, "解析/校验失败"],
+    ["clean", sample.errors.length - errored.length, "正常调用"],
+  ].map(([key, val, label]) => `<div class="stat"><span class="num" style="color:${key === "errors" && val > 0 ? "var(--bad)" : "var(--text)"}">${val}</span><span class="label">${label}</span></div>`).join("");
+
+  document.getElementById("errTableBody").innerHTML = errored.map((e) =>
+    `<tr><td class="fn">${e.function}</td><td class="mono">${e.error_type}</td><td class="msg">${escapeHtml(e.message)}</td></tr>`
+  ).join("") || `<tr><td colspan="3" style="color:var(--text-dim)">这条样本没有解析/校验失败。</td></tr>`;
+
+  // observation 回填追溯：为每条 error（含 clean 的第一条）找到下一步 prefill 里对应的消息
+  const chainGrid = document.getElementById("chainGrid");
+  const byStepMessages = sample.transcript.flatMap((step) => step.messages.map((m) => ({ ...m, step: step.step })));
+  function findWriteback(callToolId) {
+    return byStepMessages.find((m) => m.tool_call_id === callToolId && m.role === "tool");
+  }
+  const examples = [];
+  const cleanOne = sample.errors.find((e) => !e.error_present && e.tool_call_id !== "unknown");
+  if (cleanOne) examples.push({ kind: "clean", label: "正常调用", call: cleanOne });
+  const errOnes = errored.filter((e) => e.tool_call_id !== "unknown").slice(0, 1);
+  errOnes.forEach((e) => examples.push({ kind: "err", label: "解析/校验失败（id 仍真实）", call: e }));
+  const unknownOne = errored.find((e) => e.tool_call_id === "unknown");
+  if (unknownOne) examples.push({ kind: "err", label: "JSON 错到 id 都恢复不出来", call: unknownOne });
+
+  chainGrid.innerHTML = examples.map((ex) => {
+    const msg = findWriteback(ex.call.tool_call_id);
+    return `
+      <div class="chain ${ex.kind}">
+        <div class="chain-label">${ex.label}</div>
+        <div class="chain-step"><span class="k">ToolEvent.function</span><br/><span class="v hot">${ex.call.function}</span></div>
+        <div class="chain-step"><span class="k">tool_call_id（join key）</span><br/><span class="v ${ex.call.tool_call_id === "unknown" ? "bad" : ""}">${ex.call.tool_call_id}</span></div>
+        <div class="chain-step"><span class="k">error</span><br/><span class="v ${ex.call.error_type ? "bad" : ""}">${ex.call.error_type ? ex.call.error_type + " · " + escapeHtml((ex.call.message || "").slice(0, 60)) + "…" : "（无，正常调用）"}</span></div>
+        <div class="chain-arrow">↓ 回填进下一步 prefill_diff</div>
+        ${msg ? `
+          <div class="chain-step"><span class="k">step ${msg.step} · message.tool_call_id</span><br/><span class="v ${msg.tool_call_id === "unknown" ? "bad" : ""}">${msg.tool_call_id}</span></div>
+          <div class="chain-step"><span class="k">status / content_category</span><br/><span class="v">${msg.status} / ${msg.content_category}</span></div>
+        ` : `<div class="chain-step"><span class="k">未在后续步骤找到匹配消息</span></div>`}
+      </div>
+    `;
+  }).join("") || `<div style="color:var(--text-dim);font-size:0.85rem">这条样本没有可展示的调用实例。</div>`;
+}
+
+// ==================== 样本详情：live_parallel ====================
+
+function renderLiveParallelSample(sample) {
+  const root = document.getElementById("view-sample");
+  root.innerHTML = `
+    <a class="back-link" href="#/">← 返回数据集总览</a>
+    <div class="sample-head">
+      <div>
+        <div class="sid-big">${sample.id} · ${sample.uuid_short}</div>
+        <p class="sample-input-full">${escapeHtml(sample.input_text)}</p>
+      </div>
+      ${scoreBadge(sample.score)}
+    </div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>single-turn 打分，没有 tool 执行</h2></div>
+      <div class="callout">
+        <b>结构性说明：</b><code>live_parallel</code> 走的是 <code>single_turn_solver</code>，只调用一次 <code>generate()</code> 直接对
+        <code>tool_calls</code> 做 AST 匹配打分，<b>从不调用 <code>execute_tools()</code></b>——所以这条样本没有
+        <code>ToolEvent</code>、没有 <code>execution_topology</code>、没有 <code>action_parsing</code> 记录，即便模型确实一次提议了多个
+        tool_calls，也不会被我们的需求三/需求四检测器捕捉到（结构性限制，不是检测器 bug，详见 findings 文档"发现一"）。
+      </div>
+      <div class="card">
+        <div class="lp-block">
+          <div class="lp-label">model 层面：真实计费 in / out</div>
+          <div>${sample.billed_input ?? "–"} / ${sample.billed_output ?? "–"}</div>
+        </div>
+        <div class="lp-block">
+          <div class="lp-label">可选工具数</div>
+          <div>${sample.n_tools_declared}</div>
+        </div>
+        <div class="lp-block">
+          <div class="lp-label">模型提议的 tool_calls（未执行，仅用于打分）</div>
+          ${sample.tool_calls.length
+            ? sample.tool_calls.map((tc) => `<div class="toutput-block"><code>${escapeHtml(tc.function)}(${escapeHtml(JSON.stringify(tc.arguments))})</code></div>`).join("")
+            : `<div style="color:var(--text-dim)">（无）</div>`}
+        </div>
+        ${sample.final_text ? `<div class="lp-block"><div class="lp-label">final text</div><div class="toutput-block">${escapeHtml(sample.final_text)}</div></div>` : ""}
+      </div>
+    </section>
+  `;
+}
+
+// ==================== 路由 ====================
+
+function router() {
+  const hash = location.hash || "#/";
+  const dsView = document.getElementById("view-dataset");
+  const sampleView = document.getElementById("view-sample");
+  const m = hash.match(/^#\/sample\/([^/]+)\/([^/]+)$/);
+  if (m) {
+    const [, dsKey, uuid] = m;
+    const sample = (DATA[dsKey] && DATA[dsKey].samples || []).find((s) => s.uuid === uuid);
+    if (sample) {
+      dsView.hidden = true;
+      sampleView.hidden = false;
+      window.scrollTo(0, 0);
+      if (dsKey === "multi_turn_base") renderMultiTurnSample(sample);
+      else renderLiveParallelSample(sample);
+      return;
+    }
+  }
+  dsView.hidden = false;
+  sampleView.hidden = true;
+}
+
+renderDatasetView();
+window.addEventListener("hashchange", router);
+router();
+</script>
