@@ -29,8 +29,9 @@
 | 15 | [`remote_compute_workflow.md`](./remote_compute_workflow.md) | 本地 agent 节点 + 远程 NSCC 计算节点的日常工作流：代码同步（git 为主）、结果拉取、PBS 两种使用范式（交互式常驻 vLLM / 批处理长任务）、计算节点友好格式检查清单、待现场验证清单 | 要往计算节点部署/跑实验时看 |
 | 16 | [`team_collaboration.md`](./team_collaboration.md) | 两人协作方案：git 分支+PR 规范、共享 NSCC 账号下的计算资源协调、项目管理约定 | 读完 15，两人协作时看 |
 | 17 | [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) | 目标五的持续积累清单：已完成分析 SPORK（论文说的问题为什么在我们数据里没出现）+ ToolSpec（用真实 token 层数据算出论文没给的 tool-call token 占比 17.5%，换算出更保守的整体收益估算）+ 9 篇候选论文（LLMCompiler/ReWOO/SGLang/Preble/StreamingLLM/H2O/LLMLingua/FrugalGPT/Speculative Actions）分类和优先级建议 | 读完 11（roadmap），想知道外部方法能不能落进我们的干预接口时看 |
+| 17b | [`toolspec_integration_findings.md`](./toolspec_integration_findings.md) | ToolSpec 原生复现（五种方法真实速度对比，发现"并非严格 lossless"的真实特性）+ 迁移进 harness（自定义 `ModelAPI` provider，因为它是原始 HF transformers 生成循环不是 HTTP 服务）+ 二次复现，逐 token 精确对齐原生仓库输出 | 读完 17，想看具体接入案例时看 |
 
-读完这 19 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
+读完这 20 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
 ## 按用途查找
 
@@ -55,7 +56,8 @@
 - `goal1_r3_r4_dashboard.html` 生成脚本：`../inspect_trace/scripts/build_r3_r4_dashboard.py` + `_dashboard_template.html`，用法见 [`goal1_dashboard_guide.md`](./goal1_dashboard_guide.md)
 - 目标二三层 profiling 实现：`inspect_trace/vllm_metrics.py`（model invocation 层实时采集）+ `inspect_trace/analysis/{token_layer,episode_layer,pricing}.py`（token/episode 层离线分析），自带测试 `tests/test_vllm_metrics.py`/`test_analysis_layers.py`
 - 本地模型服务：`../local-model-server/`，自带 `README.md` + `scripts/{setup,serve,stop}.sh`
-- tau2-bench 适配器（第三方 benchmark 接入示例）：`../tau2_adapter/`，自带 `scripts/{setup_tau2_bench,run_native_baseline,run_adapter}.sh`
+- tau2-bench 适配器（第三方 benchmark 接入示例，OpenAI-compatible 服务型）：`../tau2_adapter/`，自带 `scripts/{setup_tau2_bench,run_native_baseline,run_adapter}.sh`
+- ToolSpec 适配器（第三方加速方法接入示例，原始 HF transformers 生成循环型，自定义 `ModelAPI`）：`../toolspec_adapter/`，自带 `scripts/{setup_toolspec,run_native_repro,run_adapter}.sh`
 - 跨子项目脚本（NSCC 同步/PBS）：`../scripts/{pull_runs,nscc_interactive_gpu_session,pbs_vllm_server_job}.sh`，用法见 [`remote_compute_workflow.md`](./remote_compute_workflow.md)
 - 实验原始数据（gitignored，不会被清理）：`../runs/`
 - 上游 inspect_ai 本体：**不在这个仓库里**，只读参考克隆仍在 `/home/liuyingen/code/inspect_ai/`（读框架自身源码/走官方教程用，不是我们项目的一部分）

@@ -69,7 +69,7 @@ ToolSpec 论文没有报告"tool-call token 占总输出的比例"这个数字�
 
 **这条数据顺带解释了它跟 SPORK 的矛盾从哪来**：SPORK 说执行等待占大头（16-37%+），ToolSpec 说生成占大头（最高 96%）——两个论断逻辑上互斥，合理推断是他们测的 workload 里"工具执行速度"截然不同（ToolSpec 大概率是快/mock 工具，生成主导；SPORK 是 GAIA 这类真实慢工具，执行主导）。这是评估任何"加速 tool calling"类论文时都该先问的第一个问题：**这篇论文的收益前提，是工具执行快还是慢？**——决定了它能不能在我们当前的 mock-tool workload 上体现出来，还是需要换一个真实工具的 benchmark。
 
-**要验证需要什么**：token 层分类现成可用（上表就是直接跑出来的，没有新写代码）。要验证 ToolSpec 本身声称的 4.2x（对 tool-call 那一段的加速），需要在我们的 serving 层实现某种 draft/verify 机制（schema-aware FSM + 检索增强）——这是一个真正的实现缺口，不是 benchmark 选型问题（这一点跟 SPORK 不同：ToolSpec 的收益不依赖工具执行是快是慢，是纯生成侧优化，理论上在我们现有的 mock-tool workload 上就能测，只是我们还没实现对应的投机解码机制）。
+**要验证需要什么（已完成）**：读完源码后直接读了 ToolSpec 自己的仓库（`/home/liuyingen/code/ToolSpec`），原样跑通了它的官方复现（baseline/pld/recycling/samd/toolspec 五种方法，Qwen2.5-3B-Instruct，API-Bank 100 条），又把它的核心机制迁移进了我们自己的 `inspect_ai` harness（新项目 `toolspec_adapter/`，一个从零实现的自定义 `ModelAPI`，因为 ToolSpec 是原始 HF `transformers` 生成循环、不是 OpenAI-compatible 服务，跟 tau2-bench 的接入方式完全不同），逐 token 精确复现了原生仓库的行为（包括它"并非严格 lossless"这个意外发现的真实特性）。完整过程、真实速度数字、以及一个"四种独立实现的投机解码方法在同样 11/100 个问题上偏离 greedy baseline"的交叉验证发现，见 [`toolspec_integration_findings.md`](./toolspec_integration_findings.md)。
 
 ## 候选论文清单（待分析）
 
@@ -108,4 +108,4 @@ ToolSpec 论文没有报告"tool-call token 占总输出的比例"这个数字�
 2. **SGLang RadixAttention / Preble 次优先**——"prefix caching 开 vs 关"这个对照实验在 `framework-selection.md` 里已经被标记为"现成可做的目标三实验"，直接延伸到这两篇就是水到渠成的事；Preble 那部分需要先有一次真并发实验（`MAX_CONNECTIONS>1`），目标二阶段验证时因为本地 vLLM 并发不稳定被搁置过，重新捡起来时可以顺带把这篇也测了。
 3. **KV cache 淘汰（StreamingLLM/H2O）、prompt 压缩（LLMLingua）、模型级联（FrugalGPT）暂缓**——不是不重要，是我们当前的 benchmark（BFCL 单条 episode 平均 7 次调用、context 不算长；tau2-bench mock domain 同样规模有限）本来就没有把这几篇论文要解决的问题（超长上下文、天量 prompt、多模型选择）真正 stress 出来，先分析也测不出有意义的对照结果。等接入一个 context 明显更长/调用链更深的 benchmark，或者目标三/四基础设施更成熟之后再回头做。
 4. **SPORK 本身、以及后续任何"投机执行覆盖 tool 等待时间"类方法**——都需要先有一个真实调用慢速外部工具的 benchmark（不是 mock 函数），这是比"分析哪篇论文"更优先的一个基础设施缺口，值得单独当一项任务考虑（可能是这个项目要不要接入 GAIA 或类似 real-tool benchmark 的问题）。
-5. **ToolSpec 反而是这份清单里少有的"benchmark 不用换、要补的是 serving 层能力"的例子**——4.2x 加速的是 tool-call 生成本身（decode 计算），不依赖工具执行快慢，理论上现在的 mock-tool workload 就能测；卡住的地方是我们的 vLLM 部署目前没有开投机解码/prompt-lookup decoding，要真的验证这篇论文的收益，需要先补服务端这块能力，跟 SPORK 那种"缺 benchmark"是两类不同的缺口，不要混着当同一件事处理。
+5. **ToolSpec：已完成**——不依赖工具执行快慢的纯生成侧优化这个判断是对的，"要补服务端能力"这个缺口也已经补上：没有走 vLLM（vLLM 的投机解码/prompt-lookup 接口跟 ToolSpec 自己 patch 过的 KV cache 树形验证代码对不上），而是直接给 ToolSpec 的原始 HF `transformers` 生成循环写了一个自定义 `ModelAPI`（`toolspec_adapter/`），复现出真实 3.05x 加速，且逐 token 精确对齐原生仓库输出。详见 [`toolspec_integration_findings.md`](./toolspec_integration_findings.md)。

@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["toolspec_adapter*"]
+
+[project]
+name = "toolspec-adapter"
+version = "0.1.0"
+description = "Drives ToolSpec's own baseline/toolspec forward functions (raw HF transformers generation loop with patched KV-cache modeling code, not an OpenAI-compatible service) from inside a custom inspect_ai ModelAPI provider, so inspect_trace's Hooks fire for real. Experimental integration, not a permanent core package."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT License" }
+dependencies = [
+    "inspect_ai",
+    "inspect_trace",
+    "torch==2.5.1",
+    "transformers==4.51.1",
+    "accelerate==1.13.0",
+    # ToolSpec's own evaluation/inference_*.py modules import these at module level even though
+    # we only call toolspec_forward()/baseline_forward() -- importing the module transitively
+    # needs them. fschat itself is deliberately NOT listed here: it pins pydantic<2, which
+    # conflicts with inspect_ai's pydantic>=2 -- see provider.py's _stub_fastchat() for how we
+    # avoid that real, unnecessary dependency conflict (we never call the one fastchat function
+    # those modules import).
+    "shortuuid",
+    "tqdm",
+    "numpy",
+]
+
+[tool.uv.sources]
+inspect_trace = { path = "../inspect_trace" }
+torch = [{ index = "pytorch-cu121" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
+
+[project.entry-points.inspect_ai]
+toolspec_adapter = "toolspec_adapter._registry"
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
