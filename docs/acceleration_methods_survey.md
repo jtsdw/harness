@@ -32,11 +32,38 @@
 - 目标三 generation/runtime 干预点——SPORK 本身就是一种 runtime 层干预（提前派发 tool 执行），如果要在我们 harness 上实现类似机制，落点在 `on_before_model_generate` 之外还需要一个能"提前触发 tool 执行、之后再对齐结果"的新钩子，现有干预点还不够。
 
 **我们自己数据的印证情况**：**测的是不同指标（不可比），且用我们已有数据能进一步说明"为什么在我们的 workload 上测不出这个问题"**——完整分析过程见对话记录，摘要：
-- 我们说"tool-call 占生成 token 比例小"，SPORK 说的是"等待 tool 执行结果的墙钟时间占比"——一个测 token 数、一个测时间，字面上不是同一个命题，也不矛盾。
+- 我们说"tool-call 占生成 token 比例小"（真实数字见下面 ToolSpec 条目：BFCL 200 样本上是 17.5%），SPORK 说的是"等待 tool 执行结果的墙钟时间占比"——一个测 token 数、一个测时间，字面上不是同一个命题，也不矛盾。
 - 用能直接对应的口径重新测（`total_busy_seconds` vs `end_to_end_latency_seconds`）：`goal2_real_validation_findings.md` 里真实样本 `multi_turn_base_0` 两者只差 5ms/16.288s（约 0.03%），远低于 SPORK 的 16-37%。
 - 原因找到了：我们目前用的 BFCL `multi_turn_*` 和 tau2-bench `mock` domain，tool 执行都是**进程内 mock 函数**，调用即返回，没有真实网络往返；SPORK 测的是 GAIA 这类 **real-tool benchmark**（真实 web 搜索、代码执行沙箱），tool 执行本身要几百 ms 到几秒。SPORK 要解决的问题在我们当前测的对象里结构性地不存在，不是我们的检测器有问题。
 
 **要验证需要什么**：`total_busy_seconds`/`end_to_end_latency_seconds` 两个字段现成可用，不需要新代码。真正缺的是**一个真实调用慢速外部工具的 benchmark/agent**（真实网络 API、真实代码执行沙箱）——没有这个，SPORK 的核心命题在我们的 harness 上永远测不出正的信号，不管代码写得多好。这也是下面"优先级建议"里反复出现的一个共性缺口，不止 SPORK 一篇论文受影响。
+
+### ToolSpec: Accelerating Tool Calling via Schema-Aware and Retrieval-Augmented Speculative Decoding
+
+[arXiv:2604.13519](https://arxiv.org/abs/2604.13519)
+
+**Insight**：tool-call 的生成本身是高度结构化的——固定 schema（工具名、参数名、类型都是预先定义好的），而且真实调用轨迹里同一个工具的调用参数经常跟历史调用高度相似（重复模式）。这跟 SPORK 完全是另一个问题：SPORK 关心的是"tool 执行完之前 GPU 在空等"，ToolSpec 关心的是"生成 tool-call 这段文本本身要多久、能不能生成得更快"——一个是 I/O 等待，一个是 decode 计算本身。
+
+**Method**：一个有限状态机在"确定性 schema token 填充"（工具名、参数 key、括号引号这类固定不变的部分，不需要模型采样，直接按 schema 摆上去）和"投机生成"（参数值这类变量字段，用 draft 模型或历史相似调用当草稿，一次验证多个 token）之间切换；额外用检索增强，把历史上相似的真实调用取出来当草稿，进一步提高 draft 命中率。即插即用，不需要重新训练。论文报告在多个 benchmark 上相比现有 training-free 投机解码方法最高 4.2x 加速（针对 tool-call 生成这一段，不是整个 episode）。
+
+**对应到我们 harness 的哪里**：
+- 目标一需求一（token 级记录）——`inspect_trace/src/inspect_trace/segment_tokens.py`/`token_attribution.py` 已经把每次模型调用的输出拆成 `reasoning_tokens_estimate`/`tool_calling_tokens_estimate`/`final_response_tokens_estimate` 三类，这正是判断"ToolSpec 那 4.2x 能换来多少整体收益"所需要的分母。
+- 目标二 token 层——`token_layer.summarize_run()` 直接能算出 tool-call token 占总输出 token 的比例（见下）。
+- 目标三 generation 干预点——ToolSpec 是纯生成侧的投机解码机制，不涉及 tool 执行/context 干预，落点明确，但需要 serving 侧支持 draft/verify（vLLM 的 speculative decoding 或 prompt-lookup decoding 能力），不是 inspect_ai Hooks 能单独实现的。
+
+**我们自己数据的印证情况**：**用真实数据算出了 ToolSpec 论文里没给出的一个数字，并做了一个粗略但诚实的整体收益估算**——BFCL 200 样本全量 run（`runs/goal1_bfcl_multi_turn_base_full`）上用 `token_layer.summarize_run()` 现算：
+
+| 输出 token 分类 | token 数 | 占总输出 token 比例 |
+|---|---|---|
+| 总计费 output tokens | 86,639 | 100% |
+| `tool_calling_tokens_estimate` | 15,143 | **17.5%** |
+| `final_response_tokens_estimate` | 55,332 | 63.9% |
+| `reasoning_tokens_estimate` | 0 | 0.0%（Qwen2.5-3B-Instruct 非推理模型，符合预期） |
+| 未归类（segment 解析覆盖不到的部分） | 16,164 | 18.7% |
+
+ToolSpec 论文没有报告"tool-call token 占总输出的比例"这个数字，我们的数据补上了这一块：**17.5%，不是"可忽略不计"，但确实是少数**，`final_response` 占大头（63.9%）。用一个简化的 Amdahl's-law 估算（假设每 token 生成耗时大致均匀，只对 tool-call 这部分应用论文报的 4.2x）：整体 decode 阶段的理论加速比 ≈ 1 / (0.175/4.2 + 0.825) ≈ **1.15x**，即约 15% 的整体 decode 时间缩短——跟论文标题党式的"4.2x"数字差距很大，但这不是论文错了，是论文报告的加速比本来就是"只对 tool-call 这一段"，我们这里如实换算成了"对整个 episode 的实际预期收益"。**这个估算本身很粗糙**（假设了 tool-call token 和其他 token 的单 token 生成耗时相同，忽略了 TTFT/prefill、忽略了 draft/verify 本身的开销，忽略了 SPORK 案例里已经确认的"tool 执行等待时间"这个可能占比更大的因素），只作为量级参考，不是精确预测。
+
+**要验证需要什么**：token 层分类现成可用（上表就是直接跑出来的，没有新写代码）。要验证 ToolSpec 本身声称的 4.2x（对 tool-call 那一段的加速），需要在我们的 serving 层实现某种 draft/verify 机制（schema-aware FSM + 检索增强）——这是一个真正的实现缺口，不是 benchmark 选型问题（这一点跟 SPORK 不同：ToolSpec 的收益不依赖工具执行是快是慢，是纯生成侧优化，理论上在我们现有的 mock-tool workload 上就能测，只是我们还没实现对应的投机解码机制）。
 
 ## 候选论文清单（待分析）
 
@@ -75,3 +102,4 @@
 2. **SGLang RadixAttention / Preble 次优先**——"prefix caching 开 vs 关"这个对照实验在 `framework-selection.md` 里已经被标记为"现成可做的目标三实验"，直接延伸到这两篇就是水到渠成的事；Preble 那部分需要先有一次真并发实验（`MAX_CONNECTIONS>1`），目标二阶段验证时因为本地 vLLM 并发不稳定被搁置过，重新捡起来时可以顺带把这篇也测了。
 3. **KV cache 淘汰（StreamingLLM/H2O）、prompt 压缩（LLMLingua）、模型级联（FrugalGPT）暂缓**——不是不重要，是我们当前的 benchmark（BFCL 单条 episode 平均 7 次调用、context 不算长；tau2-bench mock domain 同样规模有限）本来就没有把这几篇论文要解决的问题（超长上下文、天量 prompt、多模型选择）真正 stress 出来，先分析也测不出有意义的对照结果。等接入一个 context 明显更长/调用链更深的 benchmark，或者目标三/四基础设施更成熟之后再回头做。
 4. **SPORK 本身、以及后续任何"投机执行覆盖 tool 等待时间"类方法**——都需要先有一个真实调用慢速外部工具的 benchmark（不是 mock 函数），这是比"分析哪篇论文"更优先的一个基础设施缺口，值得单独当一项任务考虑（可能是这个项目要不要接入 GAIA 或类似 real-tool benchmark 的问题）。
+5. **ToolSpec 反而是这份清单里少有的"benchmark 不用换、要补的是 serving 层能力"的例子**——4.2x 加速的是 tool-call 生成本身（decode 计算），不依赖工具执行快慢，理论上现在的 mock-tool workload 就能测；卡住的地方是我们的 vLLM 部署目前没有开投机解码/prompt-lookup decoding，要真的验证这篇论文的收益，需要先补服务端这块能力，跟 SPORK 那种"缺 benchmark"是两类不同的缺口，不要混着当同一件事处理。

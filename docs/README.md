@@ -28,7 +28,7 @@
 | 14b | [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md) | 上面那篇手册的真实案例来源：接入 tau2-bench（双控 agent 评测）的完整全链路记录——同步/异步桥接方案、三个真实 bug 的排查修复、Hooks 触发验证、原生 CLI vs 我们适配器（修复前后两个版本）的逐任务结果对比 | 读完 14，想看具体案例细节时看 |
 | 15 | [`remote_compute_workflow.md`](./remote_compute_workflow.md) | 本地 agent 节点 + 远程 NSCC 计算节点的日常工作流：代码同步（git 为主）、结果拉取、PBS 两种使用范式（交互式常驻 vLLM / 批处理长任务）、计算节点友好格式检查清单、待现场验证清单 | 要往计算节点部署/跑实验时看 |
 | 16 | [`team_collaboration.md`](./team_collaboration.md) | 两人协作方案：git 分支+PR 规范、共享 NSCC 账号下的计算资源协调、项目管理约定 | 读完 15，两人协作时看 |
-| 17 | [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) | 目标五的持续积累清单：已完成分析（SPORK，含"论文说的问题为什么在我们数据里没出现"的真实排查过程）+ 9 篇候选论文（LLMCompiler/ReWOO/SGLang/Preble/StreamingLLM/H2O/LLMLingua/FrugalGPT/Speculative Actions）分类和优先级建议 | 读完 11（roadmap），想知道外部方法能不能落进我们的干预接口时看 |
+| 17 | [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) | 目标五的持续积累清单：已完成分析 SPORK（论文说的问题为什么在我们数据里没出现）+ ToolSpec（用真实 token 层数据算出论文没给的 tool-call token 占比 17.5%，换算出更保守的整体收益估算）+ 9 篇候选论文（LLMCompiler/ReWOO/SGLang/Preble/StreamingLLM/H2O/LLMLingua/FrugalGPT/Speculative Actions）分类和优先级建议 | 读完 11（roadmap），想知道外部方法能不能落进我们的干预接口时看 |
 
 读完这 19 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
@@ -67,7 +67,7 @@
 - [x] **目标二实现设计文档**——[`goal2_design.md`](./goal2_design.md) + [`goal2_real_validation_findings.md`](./goal2_real_validation_findings.md)，已完成并用真实数据验证。
 - [ ] **踩坑合集（Troubleshooting）**——目前真实踩过的坑（`anyio.get_current_task()` 不稳定、`pyairports` 空壳包、CUDA 驱动版本不匹配、nvidia wheel 缓存损坏）分散在 `goal1_real_benchmark_findings.md` 和 `local_model_deployment.md` 里。现在坑还不算多，值得等自然积累到一定量、且分散在各篇里确实开始难查的时候再抽取，不急。
 - [ ] **目标三（标准化加速干预接口）实现**——`inspect_ai_roadmap.md` 判断可行性高、工作量相对最小，是目标二完成之后下一个建议推进的目标，还没开始。
-- [ ] **目标五（加速方法 insight/method 分析）**——[`acceleration_methods_survey.md`](./acceleration_methods_survey.md)，2026-08-05 新增目标，目前只完成了 SPORK 一篇的完整分析，候选清单里 9 篇还没细读，按文档里的优先级建议逐步推进。
+- [ ] **目标五（加速方法 insight/method 分析）**——[`acceleration_methods_survey.md`](./acceleration_methods_survey.md)，2026-08-05 新增目标，目前完成了 SPORK、ToolSpec 两篇的完整分析，候选清单里还有 9 篇没细读，按文档里的优先级建议逐步推进。
 
 ## inspect_ai 官方文档精选
 

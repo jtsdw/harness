@@ -10,7 +10,7 @@
 | 二：三层 profiling 成本归因 | **已实现**（`inspect_trace/analysis/` + `vllm_metrics.py`），真实数据验证通过 | 三层全部确认可行，比最初预估更好 | 已完成 |
 | 三：标准化加速干预接口 | 未开始 | 高（大部分干预点已存在，是封装问题不是造轮子问题） | 1.5 |
 | 四：online/offline 对照实验 | 未开始 | 中，有可参考的数据模型但无可复用实现 | 2，且有调研不确定性 |
-| 五：加速方法 insight/method 分析 | **刚启动**（2026-08-05 新增目标，已完成 SPORK 一篇） | 高，方法论已验证可行（详见分析过程），瓶颈是调研广度不是技术难度 | 持续性工作，非一次性交付，见 [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) |
+| 五：加速方法 insight/method 分析 | **刚启动**（2026-08-05 新增目标，已完成 SPORK、ToolSpec 两篇） | 高，方法论已验证可行（详见分析过程），瓶颈是调研广度不是技术难度 | 持续性工作，非一次性交付，见 [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) |
 
 以下逐项展开。方法论：每一项先说 inspect_ai *现在* 提供什么（有代码证据的才算，不猜测），再说要补什么，最后给可行性判断和工作量估计。工作量用相对量级而非人天数——目标一已经做完，用它的实际工作量作为量级 1 的参照系。
 
