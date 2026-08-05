@@ -2,15 +2,17 @@
 
 单页参考：项目涉及的所有环境、密钥、缓存位置放在哪。想知道"这台机器要跑通整个项目需要什么"，看这一篇就够，不用翻 quickstart/local_model_deployment/datasets 三篇拼凑。
 
-## 三个独立环境总览
+## 五个独立环境总览
 
 | | 位置 | 管理方式 | 用途 |
 |---|---|---|---|
 | `inspect_trace`（真正跑 benchmark 用这个） | `/home/liuyingen/code/efficient-harness/inspect_trace/.venv` | uv（`uv sync --extra dev`） | `inspect_ai`（PyPI）+ `inspect_evals`（PyPI）+ `inspect_trace` 本体，跑 benchmark、看日志、生成面板都在这个环境里 |
 | local-model-server | `/home/liuyingen/code/efficient-harness/local-model-server/.venv` | uv（`./scripts/setup.sh`） | vLLM 本地推理服务，跟 `inspect_trace` 环境完全隔离（vLLM 的 torch/CUDA 依赖很重，故意分开，见下"为什么分两个环境"） |
+| `tau2_adapter`（可选，只在接入 tau2-bench 时需要） | `/home/liuyingen/code/efficient-harness/tau2_adapter/.venv` | uv（`./scripts/setup_tau2_bench.sh`） | 跑 tau2-bench 原生复现 + 迁移进我们 harness 的对比，详见 [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md)——路径依赖指向 `/home/liuyingen/code/tau2-bench`，换机器要先把那个仓库也 clone 过去 |
+| `toolspec_adapter`（可选，只在接入 ToolSpec 时需要） | `/home/liuyingen/code/efficient-harness/toolspec_adapter/.venv` | uv（`./scripts/setup_toolspec.sh`） | 跑 ToolSpec 原生复现 + 迁移进我们 harness 的对比，详见 [`toolspec_integration_findings.md`](./toolspec_integration_findings.md)——同样是运行时通过 `TOOLSPEC_REPO_DIR` 指向 `/home/liuyingen/code/ToolSpec` 这个外部仓库，换机器要先 clone |
 | `inspect_ai` 上游参考克隆（只读，可选） | `/home/liuyingen/code/inspect_ai/.venv` | uv（`uv sync --extra dev`，仓库自带） | **不是我们项目的运行环境**——2026-08-04 重构之后，`inspect_trace` 已经改成对 PyPI 上的 `inspect-ai` 声明普通依赖，不再需要这个克隆才能跑。留着纯粹是为了读 inspect_ai 框架自身源码/走官方教程（`inspect_ai_quickstart.md` 里大部分内容用的是这个环境），不想读源码可以完全不装 |
 
-`inspect_trace` 和 `local-model-server` 是**两个独立的 uv 项目**，互不干扰，也不需要互相知道对方存在——它们之间只通过 HTTP（`http://localhost:8000`）通信，不共享 Python 环境。
+这五个是**完全独立的 uv 项目**，互不干扰，也不需要互相知道对方存在——`inspect_trace`/`toolspec_adapter`/`tau2_adapter` 跟 `local-model-server` 之间只通过 HTTP（`http://localhost:8000`）通信，不共享 Python 环境。`tau2_adapter`/`toolspec_adapter` 是**可选的**：只有在需要接入 tau2-bench 或 ToolSpec 这两个具体第三方项目、跑对比实验时才需要装，平时跑 BFCL/GSM8K 之类的 benchmark 完全用不到，不用一开始就装全。
 
 ## 为什么分两个环境
 
@@ -66,9 +68,19 @@ cd /home/liuyingen/code/efficient-harness/local-model-server
 # 4. 验证
 cd /home/liuyingen/code/efficient-harness/inspect_trace
 uv run pytest tests -q      # 应该全部 passed（迁移前是 13 个）
+
+# 5.（可选）接入 tau2-bench 时才需要——先 clone tau2-bench 本体，再装适配器环境
+git clone <tau2-bench 仓库地址> /home/liuyingen/code/tau2-bench
+cd /home/liuyingen/code/efficient-harness/tau2_adapter
+./scripts/setup_tau2_bench.sh
+
+# 6.（可选）接入 ToolSpec 时才需要——同样先 clone ToolSpec 本体
+git clone <ToolSpec 仓库地址> /home/liuyingen/code/ToolSpec
+cd /home/liuyingen/code/efficient-harness/toolspec_adapter
+./scripts/setup_toolspec.sh
 ```
 
-第 3 步是可选的——如果这台机器没有兼容的 GPU，或者只打算用 hosted API（DeepSeek 之类），可以跳过，只做 1、2、4。
+第 3 步是可选的——如果这台机器没有兼容的 GPU，或者只打算用 hosted API（DeepSeek 之类），可以跳过，只做 1、2、4。第 5、6 步也是可选的——只有要接入 tau2-bench 或 ToolSpec 这两个具体第三方项目时才需要，两者互不依赖，可以只装其中一个。
 
 ## 当前状态（写这份文档时的快照，会过时，仅供参考）
 
