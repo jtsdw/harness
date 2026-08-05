@@ -160,10 +160,13 @@ if timeout 280 bash -c '
       echo "field -- see tau2_adapter/src/tau2_adapter/_registry.py (registers"
       echo "\"tau2-agent-vllm\") for a working example to copy the pattern from."
     else
-      echo "Connect from inspect_ai (tool calling emulated client-side):"
-      echo "  VLLM_BASE_URL=\"http://localhost:${PORT}/v1\" VLLM_API_KEY=\"not-needed\" \\"
-      echo "    uv run --project ${INSPECT_TRACE_PROJECT_DIR} inspect eval <task> \\"
-      echo "    --model \"openai-api/vllm/${MODEL}\" -M emulate_tools=true"
+      echo "Run an eval against it (tool calling emulated client-side) with the wrapper script,"
+      echo "not a hand-typed inspect eval command -- this is a real, runnable script, not a template:"
+      echo "  MODEL=\"openai-api/vllm/${MODEL}\" MODEL_ARGS=\"emulate_tools=true\" \\"
+      echo "  VLLM_BASE_URL=\"http://localhost:${PORT}/v1\" VLLM_API_KEY=\"not-needed\" MAX_CONNECTIONS=1 \\"
+      echo "    ${INSPECT_TRACE_PROJECT_DIR}/scripts/run_bfcl_benchmark.sh"
+      echo "(that script's own header comment documents every override -- CATEGORIES/LIMIT/OUTPUT_DIR/etc.;"
+      echo "swap run_bfcl_benchmark.sh for run_gsm8k_benchmark.sh in the same directory for GSM8K instead)"
     fi
     if [[ "$SPECULATIVE_MODE" == "ngram" ]]; then
       echo
