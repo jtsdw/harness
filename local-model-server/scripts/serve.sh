@@ -55,6 +55,12 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
+# Absolute path to the sibling inspect_trace/ project, computed from wherever this checkout
+# actually lives -- not hardcoded to any one machine's path, so the "how to connect" message below
+# is copy-pasteable as-is regardless of where the repo is cloned (e.g. under NSCC's
+# ~/scratch/harness/ convention, not just this dev machine's /home/liuyingen/code/efficient-harness/).
+INSPECT_TRACE_PROJECT_DIR="$(cd "$(pwd)/../inspect_trace" && pwd)"
+
 export PATH="$HOME/.local/bin:$PATH"
 : "${MODEL:=Qwen/Qwen2.5-3B-Instruct}"
 : "${PORT:=8000}"
@@ -156,7 +162,7 @@ if timeout 280 bash -c '
     else
       echo "Connect from inspect_ai (tool calling emulated client-side):"
       echo "  VLLM_BASE_URL=\"http://localhost:${PORT}/v1\" VLLM_API_KEY=\"not-needed\" \\"
-      echo "    uv run --project /home/liuyingen/code/efficient-harness/inspect_trace inspect eval <task> \\"
+      echo "    uv run --project ${INSPECT_TRACE_PROJECT_DIR} inspect eval <task> \\"
       echo "    --model \"openai-api/vllm/${MODEL}\" -M emulate_tools=true"
     fi
     if [[ "$SPECULATIVE_MODE" == "ngram" ]]; then
