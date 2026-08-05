@@ -75,10 +75,14 @@ OUTPUT_DIR="/home/liuyingen/code/efficient-harness/runs/goal2_vllm_metrics_valid
 
 49 条记录里，这个字段**全部是 0.0**，没有一条例外。原因：当前设计只在 `on_before_model_generate`（调用前）和 `on_sample_event` 的 `ModelEvent` 分支（调用完全结束后）各拉一次 `/metrics`——但因为是串行执行，一次调用结束的瞬间它占用的 KV cache 就已经被释放了，"调用后"这个采样点其实已经错过了真正的峰值占用。想拿到真实的峰值 KV cache 占用，需要在调用**进行中**高频轮询（就像最初做 spike 验证时那样单独起一个轮询协程），而不是只在前后各拉一次——这是下一步如果要认真做这个字段应该改的地方，当前版本如实标注为已知限制，不假装这个字段现在是准的。
 
+### 2026-08-05 补充：发现一个真实场景下 `vllm_metrics` 完全不产出记录的 bug，跟本文档"49/49 100% 精确归因"的结论存在未解决的冲突
+
+在 [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md) 的对比实验中（`toolspec_adapter` 任务 + 标准 `openai-api/vllm` provider，跑 API-Bank），`vllm_metrics` 采集器**一条记录都没有产出**（其余检测器都正常）。排查确认：`before_model_generate` 阶段抓取快照正常、correlation key 正确匹配，但 `sample_event` 内第二次 `await fetch_snapshot(...)` 既不返回也不抛异常——具体排查过程和"待查根因"的猜测（可能跟 `on_sample_event` 走的独立后台任务/anyio 取消作用域，和 `httpx.AsyncClient` 连接池的交互有关）见那篇文档。**这跟本文档"49/49 100% attribution confidence"的结论不一定矛盾**（可能是这次的具体调用模式触发了一个当时验证没覆盖到的边界情况），但也没有被排除是回归——如实标注：目标二 model invocation 层的"可靠性"结论目前只对当时验证过的那次具体场景成立，不能不加验证地推广到所有 provider/任务组合。下次要依赖 `vllm_metrics` 的真实数据时，先跑一次小规模验证确认这次没有再次触发这个 bug，不要默认它还工作正常。
+
 ## 结论
 
 - Token 层、episode 层：全部用真实数据验证通过，数字跟 inspect_ai 自己报告的、目标一阶段已经建立的结论完全吻合，没有发现新问题。
-- Model invocation 层：**比 `inspect_ai_roadmap.md` 最初预估的更可行**——TTFT/ITL/e2e-latency 三个 histogram 在我们锁定的 vLLM 版本上就有，不需要等更新版本；100% 精确归因（在 `MAX_CONNECTIONS=1` 前提下）；两处交叉验证都通过。唯一的真实限制是 `gpu_cache_usage_perc_at_end` 的采样时机，已如实记录，不影响 TTFT/ITL/e2e-latency 三个核心字段的可信度。
+- Model invocation 层：**比 `inspect_ai_roadmap.md` 最初预估的更可行**——TTFT/ITL/e2e-latency 三个 histogram 在我们锁定的 vLLM 版本上就有，不需要等更新版本；这次验证的具体场景下 100% 精确归因（在 `MAX_CONNECTIONS=1` 前提下）；两处交叉验证都通过。除了 `gpu_cache_usage_perc_at_end` 的采样时机问题，2026-08-05 又发现一个更严重的真实 bug——在另一个具体场景下这套采集器完全不产出任何记录（见上一节），"100% 精确归因"这个结论目前只对当时验证过的那次场景成立，不代表这套机制现在整体可靠，用之前要重新验证。
 - `queueing time`（数值化的排队耗时）、`prefill time`/`decode time` 的严格拆分、`batch size`、`peak GPU memory`（绝对值）——`goal2_design.md`里已经说明这些字段在当前 vLLM 版本上确实拿不到，这次真实验证没有推翻这个判断。
 
 详见代码：`inspect_trace/vllm_metrics.py`（实时采集）、`inspect_trace/analysis/{token_layer,episode_layer}.py`（离线分析）、`inspect_trace/tests/test_vllm_metrics.py` + `test_analysis_layers.py`（测试）。

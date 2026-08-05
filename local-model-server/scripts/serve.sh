@@ -9,6 +9,22 @@
 #   MAX_MODEL_LEN             (default: 16384)
 #   NATIVE_TOOL_CALLING       (default: unset/false) -- set to any non-empty value to add
 #                             --enable-auto-tool-choice --tool-call-parser hermes.
+#   SPECULATIVE_MODE          (default: unset -- no speculative decoding). Set to "ngram" to
+#                             enable vLLM's built-in n-gram/prompt-lookup speculative decoding
+#                             (no separate draft model needed -- vllm serve's own
+#                             --speculative-model "[ngram]"). See
+#                             docs/toolspec_vllm_speculative_comparison.md for why this exists:
+#                             a real comparison point against the ToolSpec paper's own
+#                             training-free speculative decoding (docs/toolspec_integration_findings.md).
+#   NUM_SPECULATIVE_TOKENS    (default: 5, only used when SPECULATIVE_MODE=ngram)
+#   NGRAM_PROMPT_LOOKUP_MAX   (default: 4, only used when SPECULATIVE_MODE=ngram)
+#   NGRAM_PROMPT_LOOKUP_MIN   (default: 1, only used when SPECULATIVE_MODE=ngram)
+#
+# Note: this vLLM version (0.6.3.post1) does not expose any speculative-decoding-specific
+# Prometheus metrics on /metrics (checked directly -- only the generic num_preemptions_total
+# counter exists), so inspect_trace's vllm_metrics.py cannot report an "accepted tokens"-style
+# field for this path the way ToolSpec's own eval does. Speed has to be measured end-to-end
+# (tokens/wall_time), not decomposed into accept-length like ToolSpec's own JSONL output.
 #
 # An earlier version of this comment claimed vllm==0.6.3.post1 (pinned here for GPU-driver
 # compatibility -- see setup.sh) has no native tool-calling support -- that was never actually
@@ -30,6 +46,10 @@ export PATH="$HOME/.local/bin:$PATH"
 : "${GPU_MEMORY_UTILIZATION:=0.85}"
 : "${MAX_MODEL_LEN:=16384}"
 : "${NATIVE_TOOL_CALLING:=}"
+: "${SPECULATIVE_MODE:=}"
+: "${NUM_SPECULATIVE_TOKENS:=5}"
+: "${NGRAM_PROMPT_LOOKUP_MAX:=4}"
+: "${NGRAM_PROMPT_LOOKUP_MIN:=1}"
 
 mkdir -p logs
 if [[ -f logs/vllm_server.pid ]] && kill -0 "$(cat logs/vllm_server.pid)" 2>/dev/null; then
@@ -42,12 +62,26 @@ if [[ -n "$NATIVE_TOOL_CALLING" ]]; then
   TOOL_CALLING_FLAGS+=(--enable-auto-tool-choice --tool-call-parser hermes)
 fi
 
+SPECULATIVE_FLAGS=()
+if [[ "$SPECULATIVE_MODE" == "ngram" ]]; then
+  SPECULATIVE_FLAGS+=(
+    --speculative-model "[ngram]"
+    --num-speculative-tokens "$NUM_SPECULATIVE_TOKENS"
+    --ngram-prompt-lookup-max "$NGRAM_PROMPT_LOOKUP_MAX"
+    --ngram-prompt-lookup-min "$NGRAM_PROMPT_LOOKUP_MIN"
+  )
+elif [[ -n "$SPECULATIVE_MODE" ]]; then
+  echo "Unsupported SPECULATIVE_MODE: $SPECULATIVE_MODE (only \"ngram\" is wired up so far)" >&2
+  exit 1
+fi
+
 echo "Starting vLLM serving $MODEL on port $PORT (this downloads the model on first run)..."
 nohup uv run vllm serve "$MODEL" \
   --port "$PORT" \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
   --max-model-len "$MAX_MODEL_LEN" \
   "${TOOL_CALLING_FLAGS[@]}" \
+  "${SPECULATIVE_FLAGS[@]}" \
   > logs/vllm_server.log 2>&1 &
 echo $! > logs/vllm_server.pid
 echo "pid $(cat logs/vllm_server.pid), logs at logs/vllm_server.log"
@@ -75,6 +109,14 @@ if timeout 280 bash -c '
       echo "  VLLM_BASE_URL=\"http://localhost:${PORT}/v1\" VLLM_API_KEY=\"not-needed\" \\"
       echo "    uv run --project /home/liuyingen/code/efficient-harness/inspect_trace inspect eval <task> \\"
       echo "    --model \"openai-api/vllm/${MODEL}\" -M emulate_tools=true"
+    fi
+    if [[ "$SPECULATIVE_MODE" == "ngram" ]]; then
+      echo
+      echo "Speculative decoding: ngram mode ON (num_speculative_tokens=${NUM_SPECULATIVE_TOKENS},"
+      echo "prompt_lookup_max=${NGRAM_PROMPT_LOOKUP_MAX}, prompt_lookup_min=${NGRAM_PROMPT_LOOKUP_MIN})."
+      echo "No separate draft model needed. This version's /metrics has no spec-decode-specific"
+      echo "fields (checked directly) -- speed has to be measured end-to-end, not via an"
+      echo "accept-length histogram like ToolSpec's own output gives you."
     fi
   else
     echo "Server failed to start -- see logs/vllm_server.log" >&2

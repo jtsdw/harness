@@ -69,7 +69,7 @@ ToolSpec 论文没有报告"tool-call token 占总输出的比例"这个数字�
 
 **这条数据顺带解释了它跟 SPORK 的矛盾从哪来**：SPORK 说执行等待占大头（16-37%+），ToolSpec 说生成占大头（最高 96%）——两个论断逻辑上互斥，合理推断是他们测的 workload 里"工具执行速度"截然不同（ToolSpec 大概率是快/mock 工具，生成主导；SPORK 是 GAIA 这类真实慢工具，执行主导）。这是评估任何"加速 tool calling"类论文时都该先问的第一个问题：**这篇论文的收益前提，是工具执行快还是慢？**——决定了它能不能在我们当前的 mock-tool workload 上体现出来，还是需要换一个真实工具的 benchmark。
 
-**要验证需要什么（已完成）**：读完源码后直接读了 ToolSpec 自己的仓库（`/home/liuyingen/code/ToolSpec`），原样跑通了它的官方复现（baseline/pld/recycling/samd/toolspec 五种方法，Qwen2.5-3B-Instruct，API-Bank 100 条），又把它的核心机制迁移进了我们自己的 `inspect_ai` harness（新项目 `toolspec_adapter/`，一个从零实现的自定义 `ModelAPI`，因为 ToolSpec 是原始 HF `transformers` 生成循环、不是 OpenAI-compatible 服务，跟 tau2-bench 的接入方式完全不同），逐 token 精确复现了原生仓库的行为（包括它"并非严格 lossless"这个意外发现的真实特性）。完整过程、真实速度数字、以及一个"四种独立实现的投机解码方法在同样 11/100 个问题上偏离 greedy baseline"的交叉验证发现，见 [`toolspec_integration_findings.md`](./toolspec_integration_findings.md)。
+**要验证需要什么（已完成）**：读完源码后直接读了 ToolSpec 自己的仓库（`/home/liuyingen/code/ToolSpec`），原样跑通了它的官方复现（baseline/pld/recycling/samd/toolspec 五种方法，Qwen2.5-3B-Instruct，API-Bank 100 条），又把它的核心机制迁移进了我们自己的 `inspect_ai` harness（新项目 `toolspec_adapter/`，一个从零实现的自定义 `ModelAPI`，因为 ToolSpec 是原始 HF `transformers` 生成循环、不是 OpenAI-compatible 服务，跟 tau2-bench 的接入方式完全不同），逐 token 精确复现了原生仓库的行为（包括它"并非严格 lossless"这个意外发现的真实特性）。完整过程、真实速度数字、以及一个"四种独立实现的投机解码方法在同样 11/100 个问题上偏离 greedy baseline"的交叉验证发现，见 [`toolspec_integration_findings.md`](./toolspec_integration_findings.md)。另外还跟 vLLM 服务自带的通用 ngram 投机解码做了真实对比——ToolSpec 的领域特定方法在这个任务上明显更好（速度快约 60%、偏离率更低），见 [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md)。
 
 ## 候选论文清单（待分析）
 

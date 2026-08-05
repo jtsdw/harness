@@ -88,6 +88,7 @@ footer a { color: var(--text-dim); }
     <a href="#speed">五方法速度对比</a>
     <a href="#correctness">正确性调查</a>
     <a href="#adapter">原生 vs 适配器</a>
+    <a href="#vllm">vs vLLM 自带投机解码</a>
     <a href="#examples">真实偏离样例</a>
   </nav>
 </header>
@@ -253,6 +254,36 @@ footer a { color: var(--text-dim); }
     </tbody>
   </table>
   <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">2026-08-05T08-44-36-00-00_toolspec-apibank_P2KTAHZusr45DS6gW4BJAs.eval</code>、<code style="display:inline;padding:1px 5px">2026-08-05T08-47-47-00-00_toolspec-apibank_oAQH8uVrbJQyi77dnEpDQi.eval</code></p>
+</section>
+
+<section class="panel" id="vllm">
+  <div class="panel-head">vLLM 自带投机解码 vs ToolSpec</div>
+  <p class="panel-desc">
+    vLLM 服务本身自带的 n-gram/prompt-lookup 投机解码（<code style="display:inline;padding:1px 5px">--speculative-model "[ngram]"</code>，不需要额外草稿模型），跟 ToolSpec 的 schema-aware + retrieval-augmented 方法对比。两套 serving 栈的 baseline 吞吐本身不同，所以看的是各自的加速比，不是原始 tokens/s。完整分析见 <a href="./toolspec_vllm_speculative_comparison.md">toolspec_vllm_speculative_comparison.md</a>。
+  </p>
+  <table>
+    <thead><tr><th></th><th>tokens/s (baseline)</th><th>tokens/s (加速模式)</th><th>各自的 speedup</th><th>跟自己 baseline 的偏离数</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>vLLM + ngram 投机解码</td>
+        <td class="mono">27.82</td>
+        <td class="mono">52.03</td>
+        <td class="mono">1.87x</td>
+        <td class="mono">23/100</td>
+      </tr>
+      <tr>
+        <td>ToolSpec（适配器，同一个 harness）</td>
+        <td class="mono">25.41</td>
+        <td class="mono">76.16</td>
+        <td class="mono">3.00x</td>
+        <td class="mono">11/100</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="panel-desc" style="margin-top:14px;margin-bottom:0">
+    在这个任务（API-Bank tool-calling 预测）上，ToolSpec 的领域特定方法比 vLLM 通用 ngram 投机解码<strong>更快</strong>（speedup 高约 60%）、<strong>偏离率也更低</strong>（11% vs 23%）——通用方法不知道输出要符合 tool-call JSON schema，领域特定方法知道。
+  </p>
+  <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">2026-08-05T11-09-24-00-00_toolspec-apibank_kk6fDBgmHCpsVVnjFUzKfn.eval</code>、<code style="display:inline;padding:1px 5px">2026-08-05T11-21-53-00-00_toolspec-apibank_QKRWtgLwgMe3WZedvALMvc.eval</code></p>
 </section>
 
 <section class="panel" id="examples">

@@ -29,6 +29,8 @@ TOOLSPEC_REPO_DIR = Path("/home/liuyingen/code/ToolSpec")
 NATIVE_OUTPUT_DIR = TOOLSPEC_REPO_DIR / "output/APIBank/Qwen2.5-3B-Instruct"
 ADAPTER_BASELINE_DIR = REPO_ROOT / "runs/toolspec_adapter_baseline"
 ADAPTER_TOOLSPEC_DIR = REPO_ROOT / "runs/toolspec_adapter_toolspec"
+VLLM_BASELINE_DIR = REPO_ROOT / "runs/toolspec_vllm_baseline"
+VLLM_NGRAM_DIR = REPO_ROOT / "runs/toolspec_vllm_ngram"
 OUTPUT_PATH = REPO_ROOT / "docs/toolspec_dashboard.html"
 
 LM_SANS_REGULAR = Path("/usr/share/texmf/fonts/opentype/public/lm/lmsans10-regular.otf")
@@ -124,6 +126,40 @@ def load_adapter_run(run_dir: Path) -> dict:
     }
 
 
+def load_vllm_run(run_dir: Path) -> dict:
+    """Like load_adapter_run(), but for runs through the stock openai-api provider (vLLM HTTP
+    service, no/ngram speculative decoding). Speed comes from ModelEvent.working_time /
+    output.usage.output_tokens instead of our own provider's ModelCall.response dict (which only
+    exists for toolspec_adapter's custom ModelAPI), because inspect_trace's own vllm_metrics
+    collector produced zero records for these two runs -- see
+    docs/toolspec_vllm_speculative_comparison.md's "一个真实发现" section for the real bug found
+    while trying to use it, and why this fallback is used instead.
+    """
+    eval_files = sorted((run_dir / "logs").glob("*.eval"))
+    assert len(eval_files) == 1, f"expected exactly one .eval in {run_dir}/logs, found {len(eval_files)}"
+    log = read_eval_log(str(eval_files[0]))
+
+    per_sample_speeds: list[float] = []
+    completions: dict[int, str] = {}
+    for sample in log.samples:
+        qid = int(sample.metadata.get("question_id", -1))
+        completions[qid] = sample.output.completion.strip() if sample.output else ""
+        for event in sample.events:
+            if event.event == "model":
+                wt = event.working_time
+                out_tok = event.output.usage.output_tokens if event.output and event.output.usage else None
+                if wt and out_tok:
+                    per_sample_speeds.append(out_tok / wt)
+
+    tps = sum(per_sample_speeds) / len(per_sample_speeds) if per_sample_speeds else 0.0
+    return {
+        "eval_file": eval_files[0].name,
+        "n_samples": len(log.samples),
+        "tokens_per_second": tps,
+        "completions": completions,
+    }
+
+
 def truncate(s: str, n: int = 220) -> str:
     return s if len(s) <= n else s[:n] + "…"
 
@@ -157,6 +193,19 @@ def main() -> None:
 
     adapter_baseline = load_adapter_run(ADAPTER_BASELINE_DIR)
     adapter_toolspec = load_adapter_run(ADAPTER_TOOLSPEC_DIR)
+
+    vllm_baseline = load_vllm_run(VLLM_BASELINE_DIR)
+    vllm_ngram = load_vllm_run(VLLM_NGRAM_DIR)
+    vllm_ngram_mismatch_qids = sorted(
+        qid
+        for qid in vllm_baseline["completions"]
+        if vllm_baseline["completions"][qid] != vllm_ngram["completions"].get(qid)
+    )
+    vllm_speedup = (
+        vllm_ngram["tokens_per_second"] / vllm_baseline["tokens_per_second"]
+        if vllm_baseline["tokens_per_second"]
+        else 0.0
+    )
 
     native_toolspec_row = next(r for r in native_speed_rows if r["method"] == "toolspec")
     native_baseline_row = next(r for r in native_speed_rows if r["method"] == "baseline")
@@ -304,6 +353,7 @@ footer a {{ color: var(--text-dim); }}
     <a href="#speed">五方法速度对比</a>
     <a href="#correctness">正确性调查</a>
     <a href="#adapter">原生 vs 适配器</a>
+    <a href="#vllm">vs vLLM 自带投机解码</a>
     <a href="#examples">真实偏离样例</a>
   </nav>
 </header>
@@ -376,6 +426,36 @@ footer a {{ color: var(--text-dim); }}
     </tbody>
   </table>
   <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">{adapter_baseline['eval_file']}</code>、<code style="display:inline;padding:1px 5px">{adapter_toolspec['eval_file']}</code></p>
+</section>
+
+<section class="panel" id="vllm">
+  <div class="panel-head">vLLM 自带投机解码 vs ToolSpec</div>
+  <p class="panel-desc">
+    vLLM 服务本身自带的 n-gram/prompt-lookup 投机解码（<code style="display:inline;padding:1px 5px">--speculative-model "[ngram]"</code>，不需要额外草稿模型），跟 ToolSpec 的 schema-aware + retrieval-augmented 方法对比。两套 serving 栈的 baseline 吞吐本身不同，所以看的是各自的加速比，不是原始 tokens/s。完整分析见 <a href="./toolspec_vllm_speculative_comparison.md">toolspec_vllm_speculative_comparison.md</a>。
+  </p>
+  <table>
+    <thead><tr><th></th><th>tokens/s (baseline)</th><th>tokens/s (加速模式)</th><th>各自的 speedup</th><th>跟自己 baseline 的偏离数</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>vLLM + ngram 投机解码</td>
+        <td class="mono">{vllm_baseline['tokens_per_second']:.2f}</td>
+        <td class="mono">{vllm_ngram['tokens_per_second']:.2f}</td>
+        <td class="mono">{vllm_speedup:.2f}x</td>
+        <td class="mono">{len(vllm_ngram_mismatch_qids)}/100</td>
+      </tr>
+      <tr>
+        <td>ToolSpec（适配器，同一个 harness）</td>
+        <td class="mono">{adapter_baseline['tokens_per_second']:.2f}</td>
+        <td class="mono">{adapter_toolspec['tokens_per_second']:.2f}</td>
+        <td class="mono">{adapter_toolspec['tokens_per_second']/adapter_baseline['tokens_per_second']:.2f}x</td>
+        <td class="mono">{len(adapter_toolspec['incorrect_qids'])}/100</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="panel-desc" style="margin-top:14px;margin-bottom:0">
+    在这个任务（API-Bank tool-calling 预测）上，ToolSpec 的领域特定方法比 vLLM 通用 ngram 投机解码<strong>更快</strong>（speedup 高约 60%）、<strong>偏离率也更低</strong>（11% vs 23%）——通用方法不知道输出要符合 tool-call JSON schema，领域特定方法知道。
+  </p>
+  <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">{vllm_baseline['eval_file']}</code>、<code style="display:inline;padding:1px 5px">{vllm_ngram['eval_file']}</code></p>
 </section>
 
 <section class="panel" id="examples">
