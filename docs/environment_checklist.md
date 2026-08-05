@@ -14,6 +14,65 @@
 
 这五个是**完全独立的 uv 项目**，互不干扰，也不需要互相知道对方存在——`inspect_trace`/`toolspec_adapter`/`tau2_adapter` 跟 `local-model-server` 之间只通过 HTTP（`http://localhost:8000`）通信，不共享 Python 环境。`tau2_adapter`/`toolspec_adapter` 是**可选的**：只有在需要接入 tau2-bench 或 ToolSpec 这两个具体第三方项目、跑对比实验时才需要装，平时跑 BFCL/GSM8K 之类的 benchmark 完全用不到，不用一开始就装全。
 
+## 常见用法速查
+
+环境装好之后实际怎么跑——每一行都是可以直接复制执行的真实命令，不是需要手改的模板。
+
+### 跑 BFCL / GSM8K（最常用，只需要 `inspect_trace` + `local-model-server` 两个环境）
+
+```bash
+cd local-model-server
+./scripts/serve.sh   # 或 serve_baseline.sh / serve_native_tool_calling.sh / serve_ngram_speculative.sh，见下方 vLLM 投机解码一节
+
+MODEL="openai-api/vllm/Qwen/Qwen2.5-3B-Instruct" MODEL_ARGS="emulate_tools=true" \
+VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" MAX_CONNECTIONS=1 \
+  ../inspect_trace/scripts/run_bfcl_benchmark.sh
+# 换成 run_gsm8k_benchmark.sh 跑 GSM8K，接口一样
+
+./scripts/stop.sh    # 跑完记得停，释放显存
+```
+
+`run_bfcl_benchmark.sh`/`run_gsm8k_benchmark.sh` 自己头部注释里有完整的可选参数说明（`CATEGORIES`/`LIMIT`/`OUTPUT_DIR`/`MAX_CONNECTIONS` 等）。
+
+### tau2-bench（需要先装 `tau2_adapter` 环境）
+
+```bash
+cd tau2_adapter/scripts
+./setup_tau2_bench.sh          # 装 tau2-bench 依赖 + 打补丁，幂等，重复跑会自动跳过已完成的步骤
+./run_native_baseline.sh       # 用 tau2-bench 自己的原生 CLI 跑一遍，作为对照基线
+./run_adapter.sh native        # 迁移进我们 inspect_ai harness 再跑一遍（用 tau2-agent-vllm provider，真原生 tool-calling）
+./run_adapter.sh emulate       # 迁移进我们 harness 的另一个变体（emulate_tools=true，client 端模拟工具调用）
+```
+
+结果对比、发现的三个真实 bug、Hooks 触发验证，见 [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md)。
+
+### ToolSpec（需要先装 `toolspec_adapter` 环境）
+
+```bash
+cd toolspec_adapter/scripts
+./setup_toolspec.sh            # 装 ToolSpec 依赖（含 torch==2.5.1 cu121 wheel），幂等
+NUM_QUESTIONS=100 METHODS="baseline pld recycling samd toolspec" ./run_native_repro.sh   # 原生仓库五种方法复现
+./run_adapter.sh baseline      # 迁移进我们 harness：不开加速
+./run_adapter.sh toolspec      # 迁移进我们 harness：ToolSpec 的 schema-aware + retrieval-augmented 投机解码
+```
+
+真实速度数字、"并非严格 lossless"这个真实发现、原生仓库 vs 适配器的逐 token 对比，见 [`toolspec_integration_findings.md`](./toolspec_integration_findings.md)。
+
+### vLLM 自带投机解码（只需要 `local-model-server` + `inspect_trace`，不需要额外装环境）
+
+```bash
+cd local-model-server
+./scripts/serve_ngram_speculative.sh   # 起服务，n-gram/prompt-lookup 模式，不需要额外草稿模型
+
+MODEL="openai-api/vllm/Qwen/Qwen2.5-3B-Instruct" MODEL_ARGS="emulate_tools=true" \
+VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" MAX_CONNECTIONS=1 \
+  ../inspect_trace/scripts/run_bfcl_benchmark.sh
+
+./scripts/stop.sh
+```
+
+跟 ToolSpec 的真实对比（速度、正确性）见 [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md)。
+
 ## 为什么分两个环境
 
 `local-model-server` 的依赖（`vllm`/`torch`/CUDA runtime 库）被这台机器的 GPU 驱动（535.230.02，最高支持 CUDA 12.2）严格限定了版本范围，`torch==2.4.0`（CUDA 12.1 wheel）是能用的上限。如果跟 `inspect_trace` 装进同一个环境，任何一边升级依赖都可能连带把这套精确版本组合搞坏。分开之后，`inspect_trace` 环境可以自由升级，不用管 GPU 驱动这件事。完整踩坑记录见 [`local_model_deployment.md`](./local_model_deployment.md)。
