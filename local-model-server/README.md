@@ -9,15 +9,43 @@ inspect_ai's own dependencies, and mixing the two would make both harder to reas
 ## Quick start
 
 ```bash
-cd /home/liuyingen/code/local-model-server
+cd /home/liuyingen/code/efficient-harness/local-model-server
 ./scripts/setup.sh   # one-time environment setup + GPU sanity check
 ./scripts/serve.sh    # starts the server, downloads the model on first run, waits until ready
 ./scripts/stop.sh     # stops it
 ```
 
 Then point inspect_ai at it (see `scripts/serve.sh`'s own output for the exact command, or
-`/home/liuyingen/code/doc/efficient-harness/local_model_deployment.md` for a full worked example running the same BFCL
-benchmark used to validate `inspect_trace` against a real hosted model).
+`docs/local_model_deployment.md` for a full worked example running the same BFCL benchmark used to
+validate `inspect_trace` against a real hosted model).
+
+## Scripts
+
+`serve.sh` is the one script that actually starts vLLM -- every mode below is the *same* script,
+just with different environment variables set before calling it (see `serve.sh`'s own header
+comment for the full list of variables: `MODEL`/`PORT`/`GPU_MEMORY_UTILIZATION`/`MAX_MODEL_LEN`
+plus `NATIVE_TOOL_CALLING`/`SPECULATIVE_MODE`/`NUM_SPECULATIVE_TOKENS`/
+`NGRAM_PROMPT_LOOKUP_MAX`/`NGRAM_PROMPT_LOOKUP_MIN`). Only one server can run at a time --
+`serve.sh` refuses to start a second one on top of an already-running `logs/vllm_server.pid`.
+
+The named wrappers below exist so you don't have to remember env var names for the specific
+configurations this project has actually used and validated -- each one is a few lines that just
+set the right variables and call `serve.sh`. `serve.sh` itself carries all the real logic
+(readiness polling, PID/log management, error handling) in exactly one place, so a fix there
+applies to every mode without needing to touch N near-duplicate scripts.
+
+| Script | Mode | When to use |
+|---|---|---|
+| `serve_baseline.sh` | No native tool-calling, no speculative decoding | Default/most battle-tested path. Pair with `-M emulate_tools=true` on the inspect_ai side. |
+| `serve_native_tool_calling.sh` | `--enable-auto-tool-choice --tool-call-parser hermes` | Real native tool-calling server-side. inspect_ai's stock `openai-api` provider still can't use it as-is (Bug 3, `docs/tau2_bench_integration_findings.md`) -- either keep `emulate_tools=true`, or use a custom `ModelAPI` that strips the `"strict"` field (see `tau2_adapter/src/tau2_adapter/_registry.py`). |
+| `serve_ngram_speculative.sh` | `--speculative-model "[ngram]"`, no draft model needed | Real 1.87x speedup vs its own baseline, but a real 23/100 output-divergence rate -- see `docs/toolspec_vllm_speculative_comparison.md` before trusting outputs for anything correctness-sensitive. |
+| `setup.sh` | -- | One-time env setup + GPU/CUDA sanity check. Idempotent. |
+| `stop.sh` | -- | Stops whichever server is currently running. |
+
+Want a mode that isn't one of these three (e.g. a different `NUM_SPECULATIVE_TOKENS`, or a future
+draft-model-based speculative mode)? Call `serve.sh` directly with the env vars you need -- the
+named wrappers only cover the combinations this project has actually run and written findings
+about, they're not the only combinations `serve.sh` supports.
 
 ## Hardware / driver constraint that shapes every pin in this project
 
@@ -44,7 +72,7 @@ One real capability cost of this pin: `vllm==0.6.3.post1` predates the `--enable
 `--tool-call-parser` CLI flags (added in a later 0.6.x release), so **this server cannot natively
 parse structured tool calls**. Work around it client-side — see "Connecting from inspect_ai" below.
 
-## Three broken/incomplete dependency resolutions this project works around
+## Four broken/incomplete dependency resolutions this project works around
 
 Discovered by actually trying to run the server and reading the traceback, not by inspection — each
 one is a real failure mode worth knowing about if you touch dependencies here.
@@ -77,6 +105,18 @@ one is a real failure mode worth knowing about if you touch dependencies here.
    `scripts/setup.sh` checks every `nvidia/*` directory under `.venv` for at least one `.so` file after
    `uv sync` and force-reinstalls (`--no-cache`) any that come up empty — run it after any dependency
    change, not just once.
+
+4. **On PBS/Slurm-managed multi-GPU clusters (first hit on an NSCC DGX node), `CUDA_VISIBLE_DEVICES`
+   can be set to GPU UUIDs instead of plain integer indices** (e.g.
+   `GPU-2a95c117-1313-cb8f-323f-ea75d126060d`), as part of cgroup-level device isolation. This vLLM
+   version is too old to handle that: `vllm/platforms/cuda.py::device_id_to_physical_device_id()`
+   does a bare `int()` on each entry and crashes with `ValueError: invalid literal for int()` before
+   the engine even starts, deep in a traceback that gives no hint the actual problem is the
+   env var's format. `serve.sh` now detects a non-numeric `CUDA_VISIBLE_DEVICES` and remaps it to
+   sequential indices (`0`, `0,1`, ...) before starting vLLM — safe specifically because the
+   scheduler's cgroup restriction already means the process can only see its allocated GPU(s); this
+   only fixes the label format vLLM's older code expects, it doesn't change which physical GPU(s)
+   are used.
 
 ## Connecting from inspect_ai
 

@@ -51,6 +51,23 @@ export PATH="$HOME/.local/bin:$PATH"
 : "${NGRAM_PROMPT_LOOKUP_MAX:=4}"
 : "${NGRAM_PROMPT_LOOKUP_MIN:=1}"
 
+# Some PBS/Slurm-managed multi-GPU clusters set CUDA_VISIBLE_DEVICES to GPU UUIDs
+# (e.g. "GPU-2a95c117-1313-cb8f-323f-ea75d126060d") instead of plain integer indices, as part of
+# cgroup-level device isolation. This vLLM version (0.6.3.post1) is too old to handle that --
+# vllm/platforms/cuda.py::device_id_to_physical_device_id() does a bare int() on each entry and
+# crashes with "invalid literal for int()" before the engine even starts. Remapping to sequential
+# indices (0, 1, ...) is safe here specifically because the scheduler's cgroup restriction already
+# means this process can only see its allocated GPU(s) -- which physical GPU(s) are visible was
+# decided upstream, this only fixes the label format vLLM's older code expects.
+if [[ -n "${CUDA_VISIBLE_DEVICES:-}" && ! "$CUDA_VISIBLE_DEVICES" =~ ^[0-9]+(,[0-9]+)*$ ]]; then
+  IFS=',' read -ra _cvd_entries <<< "$CUDA_VISIBLE_DEVICES"
+  _cvd_new=$(seq -s, 0 $((${#_cvd_entries[@]} - 1)))
+  echo "CUDA_VISIBLE_DEVICES=\"$CUDA_VISIBLE_DEVICES\" uses non-numeric device identifiers," >&2
+  echo "which this vLLM version can't parse. Remapping to \"$_cvd_new\" (safe under PBS/Slurm" >&2
+  echo "cgroup-based GPU isolation -- see this comment in serve.sh for why)." >&2
+  export CUDA_VISIBLE_DEVICES="$_cvd_new"
+fi
+
 mkdir -p logs
 if [[ -f logs/vllm_server.pid ]] && kill -0 "$(cat logs/vllm_server.pid)" 2>/dev/null; then
   echo "A server is already running (pid $(cat logs/vllm_server.pid)). Run ./scripts/stop.sh first."
