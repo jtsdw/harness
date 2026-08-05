@@ -104,29 +104,26 @@ export TOOLSPEC_REFERENCE_JSONL=/home/liuyingen/code/ToolSpec/output/APIBank/Qwe
 
 ### 速度对比：原生仓库 vs 适配器（forward-call-only 计时）
 
-用 inspect_ai `.eval` 日志里每次 `ModelCall` 记录的 `wall_time`/`new_tokens`（只统计 `_forward()` 内部的真实计算耗时，不含 inspect_ai 自身的编排/trace 写入开销），跟 Phase 1 原生脚本用完全同口径的字段比：
+用 inspect_ai `.eval` 日志里每次 `ModelCall` 记录的 `wall_time`/`new_tokens`（只统计 `_forward()` 内部的真实计算耗时，不含 inspect_ai 自身的编排/trace 写入开销），跟 Phase 1 原生脚本对比。**这里用的是 ToolSpec 自己 `evaluation/speed.py` 的真实算法**——对每一题分别算 `tokens/wall_time` 的比值，再对这些比值取平均（`np.array(speeds).mean()`），**不是**把所有题目的 token 总数除以总耗时。这两种算法在这份数据上给出的数字差异不小（第一次写这份对比脚本时用错了后一种算法，得到 2.77x，跟原生仓库的 3.05x 对不上，回头查是脚本口径不一致导致的,不是复现出了偏差——已经改用跟原生脚本完全一致的算法重新算过，过程见 `inspect_trace/scripts/build_toolspec_dashboard.py::speed_stats()` 的注释）：
 
 | | tokens/s (baseline) | tokens/s (toolspec) | speedup |
 |---|---|---|---|
 | 原生仓库（Phase 1） | 25.35 | 77.33 | 3.05x |
-| 适配器（Phase 2） | 25.73 | 69.18 | 2.69x |
+| 适配器（Phase 2） | 25.41 | 76.16 | 3.00x |
 
-baseline 模式两边基本一致（25.35 vs 25.73，1.5% 的差异在噪声范围内），**toolspec 模式适配器慢了约 10.5%**（77.33 → 69.18 tokens/s），mean accepted tokens 也从 4.761 略降到 4.613。
-
-**最可能的原因，如实标注为推断不是已证实的定论**：适配器里 `wall_time` 的计时范围是 `await anyio.to_thread.run_sync(self._forward, ...)` 这一整段，包含线程池调度开销，而不只是 `_forward()` 内部真正的 CUDA 计算时间；原生脚本的计时是在同一个线程里直接 `torch.cuda.synchronize(); start=time.time(); ...`，没有这层调度开销。这个固定的每次调用开销，在 baseline（平均每题 ~2s）里占比很小，在 toolspec（平均每题 ~0.6s）里占比相对大得多——这跟"baseline 两边几乎一致、toolspec 差了 10%"这个观察方向是吻合的。**没有进一步做微基准测量去精确量化这个开销**，如实标注为最可能的解释而非已验证的结论，值得记录但不值得为了这一个数字继续深挖。
+两边**基本一致**（3.05x vs 3.00x，1.7% 的差异），mean accepted tokens 也很接近（4.761 vs 4.613）。**适配器没有引入值得关注的速度损耗**——这是比之前草稿更干净的结论：早先版本这里写着"适配器慢了约 10.5%，可能是 anyio 线程调度开销"，那个 10.5% 是算法口径错误的产物，不是真实存在的开销，已经删掉那段不成立的推断。
 
 ## 结论
 
 - ToolSpec 的核心机制（schema-aware + retrieval-augmented speculative decoding）**真实可复现**：3.05x 加速，排序符合论文预期，在我们的模型/硬件组合下是可信的正向结果。
 - **"training-free 且无损"这个描述在实践中有一个小但真实的例外**：11/100（11%）的输出偏离严格 greedy baseline，但证明了这不是 ToolSpec 独有的问题，是这类"批量树形验证"方法在 fp16 GPU 上普遍共享的数值特性（pld/recycling/samd 都有几乎相同的偏离集合）——这是一个值得写进后续论文分析/工程决策的真实发现,不是我们复现有误。
 - **迁移到 inspect_ai 之后，逐 token 精确复现了原生仓库的行为**（包括它的不完美之处），证明适配器设计是对的——不是"看起来差不多"，是用代码逐条比对过完全一致的 11 个 mismatch question_id。
-- **迁移引入了约 10% 的可归因、有解释、但未精确量化的速度损耗**，来源大概率是线程调度开销而非逻辑差异；如实记录，没有为了让数字好看而回避。
+- **速度也基本没有损耗**（3.05x vs 3.00x）——用 ToolSpec 自己论文的算法口径重新核对过，之前草稿里"约 10% 速度损耗、疑似 anyio 线程调度开销"是脚本口径错误（错用了"总 token 数 / 总耗时"而不是论文自己的"逐题算比值再取平均"）产生的假象，已经改正，不留错误结论。
 
 ## 已知限制
 
 - 只迁移了 `baseline`/`toolspec` 两种模式，`pld`/`recycling`/`samd` 三个 baseline 方法尚未做同样的 `ModelAPI` 封装——如果要在 harness 里做完整五方法对比，需要照 `provider.py` 的 `_forward()` 分支模式各加一段（每个方法自己的 forward 函数签名不同，不是简单的参数切换）。
 - 这次跑的是 100/399 条样本（API-Bank 三个 level 汇总的前 100 条），不是全量——跟这个项目一贯的"先用有代表性的子集验证、需要更强统计显著性时再扩大规模"的做法一致，扩到全量样本只需要改 `NUM_QUESTIONS`/`-T limit=`，代码不用改。
-- 适配器的 10% 速度损耗来源没有做微基准精确定位（见上），如实标注为待深挖项，不影响本次复现结论的可信度（因为逐 token 输出已经证明了行为一致性，速度差异是"adapter overhead"层面的问题，不是"复现对不对"层面的问题）。
 - `inspect_trace` 的 token 层三分类（`reasoning`/`tool_calling`/`final_response`）在这个 benchmark 上没有意义——API-Bank 的输出**全部**是 tool_calling（单轮预测，不像 BFCL multi_turn 那样混合推理文本和最终回复），跟 ToolSpec 论文本身讨论"tool-calling 生成占比"的问题设定是一致的（这也是为什么 `acceleration_methods_survey.md` 里 ToolSpec 那条分析要用 BFCL 数据单独算 token 占比,不能直接从这次的数据里拿）。
 
 ## 复现命令
@@ -140,7 +137,18 @@ NUM_QUESTIONS=100 METHODS="baseline pld recycling samd toolspec" ./toolspec_adap
 uv sync --project toolspec_adapter   # 或直接用 run_adapter.sh 内部的 uv run --project
 ./toolspec_adapter/scripts/run_adapter.sh baseline
 ./toolspec_adapter/scripts/run_adapter.sh toolspec
+
+# 生成可视化面板（每次运行都直接从上面产出的原始文件重新计算，不依赖任何写死的数字）
+cd inspect_trace && uv run python scripts/build_toolspec_dashboard.py
 ```
+
+## 怎么亲自核对这份文档里的每一个数字
+
+不需要相信这篇文档的叙述——所有原始数据都在磁盘上，可以直接打开看：
+
+- 原生仓库五种方法的原始输出：`/home/liuyingen/code/ToolSpec/output/APIBank/Qwen2.5-3B-Instruct/*.jsonl`（纯文本 JSONL，每行一条样本，含真实 `wall_time`/`new_tokens`/`accept_lengths`/模型输出全文）
+- 适配器跑出来的结果：`runs/toolspec_adapter_{baseline,toolspec}/logs/*.eval`（用 `inspect view --log-dir runs/toolspec_adapter_toolspec/logs` 在浏览器里打开）+ `runs/toolspec_adapter_{baseline,toolspec}/.inspect_trace/`（真实的逐样本 Hooks 记录）
+- 可视化面板：`docs/toolspec_dashboard.html`（或本次发布的 [Artifact](https://claude.ai/code/artifact/ef09aed1-30e8-4344-9675-5b59802f1317)），每次重新运行 `build_toolspec_dashboard.py` 都会现场重新读上面这些原始文件、重新计算，不是缓存的静态数字
 
 ## 文件清单
 
@@ -149,4 +157,5 @@ uv sync --project toolspec_adapter   # 或直接用 run_adapter.sh 内部的 uv 
 - `toolspec_adapter/src/toolspec_adapter/dataset.py` —— API-Bank 数据集加载
 - `toolspec_adapter/src/toolspec_adapter/task.py` —— Task 组装 + 对照参考结果的 scorer
 - `toolspec_adapter/scripts/{setup_toolspec,run_native_repro,run_adapter}.sh` —— 复现脚本
+- `inspect_trace/scripts/build_toolspec_dashboard.py` —— 可视化面板生成脚本（含 `speed_stats()` 里对"两种 tokens/s 算法差异"这个真实踩过的坑的详细注释）
 - 关联分析：[`acceleration_methods_survey.md`](./acceleration_methods_survey.md) 的 ToolSpec 条目（insight/method 层面的分析，这篇文档是它的"实测验证"后续）

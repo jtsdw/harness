@@ -58,6 +58,7 @@
 - 本地模型服务：`../local-model-server/`，自带 `README.md` + `scripts/{setup,serve,stop}.sh`
 - tau2-bench 适配器（第三方 benchmark 接入示例，OpenAI-compatible 服务型）：`../tau2_adapter/`，自带 `scripts/{setup_tau2_bench,run_native_baseline,run_adapter}.sh`
 - ToolSpec 适配器（第三方加速方法接入示例，原始 HF transformers 生成循环型，自定义 `ModelAPI`）：`../toolspec_adapter/`，自带 `scripts/{setup_toolspec,run_native_repro,run_adapter}.sh`
+- ToolSpec 可视化面板生成脚本：`../inspect_trace/scripts/build_toolspec_dashboard.py`，产出 `toolspec_dashboard.html`，每次运行都现场从原始 run 数据重新计算
 - 跨子项目脚本（NSCC 同步/PBS）：`../scripts/{pull_runs,nscc_interactive_gpu_session,pbs_vllm_server_job}.sh`，用法见 [`remote_compute_workflow.md`](./remote_compute_workflow.md)
 - 实验原始数据（gitignored，不会被清理）：`../runs/`
 - 上游 inspect_ai 本体：**不在这个仓库里**，只读参考克隆仍在 `/home/liuyingen/code/inspect_ai/`（读框架自身源码/走官方教程用，不是我们项目的一部分）
