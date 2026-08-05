@@ -42,7 +42,9 @@
 
 [arXiv:2604.13519](https://arxiv.org/abs/2604.13519)
 
-**Insight**：tool-call 的生成本身是高度结构化的——固定 schema（工具名、参数名、类型都是预先定义好的），而且真实调用轨迹里同一个工具的调用参数经常跟历史调用高度相似（重复模式）。这跟 SPORK 完全是另一个问题：SPORK 关心的是"tool 执行完之前 GPU 在空等"，ToolSpec 关心的是"生成 tool-call 这段文本本身要多久、能不能生成得更快"——一个是 I/O 等待，一个是 decode 计算本身。
+**Insight**（论文原话论证）：tool-call 的生成本身是高度结构化的——固定 schema（工具名、参数名、类型都是预先定义好的），而且真实调用轨迹里同一个工具的调用参数经常跟历史调用高度相似（API-Bank 上平均每个工具被重复调用 10.95 次）。论文的落脚点是**延迟占比，不是 token 占比**：原话是"tool-calling generation is the dominant bottleneck in tool-calling pipelines"，并给出两个具体数字——tool-calling 生成耗时"roughly 4× larger than the time spent executing the tools"，占端到端延迟"up to 96%"。这跟 SPORK 完全是另一个问题：SPORK 关心的是"tool 执行完之前 GPU 在空等"（执行占大头），ToolSpec 关心的是"生成 tool-call 这段文本本身要多久"（生成占大头）——两者在各自的 workload 上给出的"谁是瓶颈"结论，方向是相反的，见下面"我们自己数据的印证情况"。
+
+**一个论文没写但推理上站得住的补充论证**（团队自己的推断，不是论文原话，标注清楚以免误引用）：投机解码本身要求 draft 分布贴近 target 分布，而 agent 一次生成里 reasoning（自然语言、高熵）和 tool-call JSON（schema 约束、近确定性、低熵）是统计特性完全不同的两段——一个通用 draft 模型很难同时贴合两边的分布。这能解释论文里"schema 部分用确定性 FSM 填充、只对真正变化的字段做投机"这个设计选择为什么比通用 training-free 投机解码（比如 prompt lookup）更好，但论文本身没有用"跨 segment 分布异质"这个框架去论证，是我们自己补的一层理论解释,不能当成论文的主张转述给别人。
 
 **Method**：一个有限状态机在"确定性 schema token 填充"（工具名、参数 key、括号引号这类固定不变的部分，不需要模型采样，直接按 schema 摆上去）和"投机生成"（参数值这类变量字段，用 draft 模型或历史相似调用当草稿，一次验证多个 token）之间切换；额外用检索增强，把历史上相似的真实调用取出来当草稿，进一步提高 draft 命中率。即插即用，不需要重新训练。论文报告在多个 benchmark 上相比现有 training-free 投机解码方法最高 4.2x 加速（针对 tool-call 生成这一段，不是整个 episode）。
 
@@ -62,6 +64,10 @@
 | 未归类（segment 解析覆盖不到的部分） | 16,164 | 18.7% |
 
 ToolSpec 论文没有报告"tool-call token 占总输出的比例"这个数字，我们的数据补上了这一块：**17.5%，不是"可忽略不计"，但确实是少数**，`final_response` 占大头（63.9%）。用一个简化的 Amdahl's-law 估算（假设每 token 生成耗时大致均匀，只对 tool-call 这部分应用论文报的 4.2x）：整体 decode 阶段的理论加速比 ≈ 1 / (0.175/4.2 + 0.825) ≈ **1.15x**，即约 15% 的整体 decode 时间缩短——跟论文标题党式的"4.2x"数字差距很大，但这不是论文错了，是论文报告的加速比本来就是"只对 tool-call 这一段"，我们这里如实换算成了"对整个 episode 的实际预期收益"。**这个估算本身很粗糙**（假设了 tool-call token 和其他 token 的单 token 生成耗时相同，忽略了 TTFT/prefill、忽略了 draft/verify 本身的开销，忽略了 SPORK 案例里已经确认的"tool 执行等待时间"这个可能占比更大的因素），只作为量级参考，不是精确预测。
+
+**跟论文"tool-calling 是延迟大头（最高 96%）"这个具体断言直接冲突的一条真实数据**：用同一份数据算平均单次长度而不是总量——`tool_calling_tokens_estimate` 总量 / 目标一阶段统计的真实 tool call 次数（857 次，`goal1_real_benchmark_findings.md`）≈ **17.7 token/次**；`final_response_tokens_estimate` 总量 / 粗估的 final-response 类调用次数（每 episode 平均 7.03 次调用中刨除平均 4.285 次 tool call）≈ **100.8 token/次**。也就是说在我们这个"小模型 + BFCL 简单工具集"的场景下，tool-call 段无论是总 token 数还是单次长度都不是大头，`final_response` 反而更长——这跟 ToolSpec 论文的核心断言方向相反。合理解释是 workload 差异（论文测的 API-Bank 这类场景工具/参数结构更复杂），不代表论文错，但如实说明：**"tool-calling 是不是延迟瓶颈"本身是 workload-dependent 的经验问题，不能默认套用到任何一个新 benchmark 上**，用之前必须先用自己的数据测一遍再下结论。（另外要注意一个已知的度量口径问题：`goal1_r3_r4_real_benchmark_findings.md` 记录过 `final_response_tokens_estimate` 有时会把"tool_calls 解析失败、模型其实想调用工具但格式错了"的输出也计入，所以这里的 `final_response` 总量可能略微偏高，不是纯粹"模型主动选择直接回答"的部分——如实标注这个混淆源，不假装数字绝对干净。）
+
+**这条数据顺带解释了它跟 SPORK 的矛盾从哪来**：SPORK 说执行等待占大头（16-37%+），ToolSpec 说生成占大头（最高 96%）——两个论断逻辑上互斥，合理推断是他们测的 workload 里"工具执行速度"截然不同（ToolSpec 大概率是快/mock 工具，生成主导；SPORK 是 GAIA 这类真实慢工具，执行主导）。这是评估任何"加速 tool calling"类论文时都该先问的第一个问题：**这篇论文的收益前提，是工具执行快还是慢？**——决定了它能不能在我们当前的 mock-tool workload 上体现出来，还是需要换一个真实工具的 benchmark。
 
 **要验证需要什么**：token 层分类现成可用（上表就是直接跑出来的，没有新写代码）。要验证 ToolSpec 本身声称的 4.2x（对 tool-call 那一段的加速），需要在我们的 serving 层实现某种 draft/verify 机制（schema-aware FSM + 检索增强）——这是一个真正的实现缺口，不是 benchmark 选型问题（这一点跟 SPORK 不同：ToolSpec 的收益不依赖工具执行是快是慢，是纯生成侧优化，理论上在我们现有的 mock-tool workload 上就能测，只是我们还没实现对应的投机解码机制）。
 
