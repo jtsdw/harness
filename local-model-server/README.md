@@ -72,7 +72,7 @@ One real capability cost of this pin: `vllm==0.6.3.post1` predates the `--enable
 `--tool-call-parser` CLI flags (added in a later 0.6.x release), so **this server cannot natively
 parse structured tool calls**. Work around it client-side — see "Connecting from inspect_ai" below.
 
-## Four broken/incomplete dependency resolutions this project works around
+## Five broken/incomplete dependency resolutions this project works around
 
 Discovered by actually trying to run the server and reading the traceback, not by inspection — each
 one is a real failure mode worth knowing about if you touch dependencies here.
@@ -117,6 +117,18 @@ one is a real failure mode worth knowing about if you touch dependencies here.
    scheduler's cgroup restriction already means the process can only see its allocated GPU(s); this
    only fixes the label format vLLM's older code expects, it doesn't change which physical GPU(s)
    are used.
+
+5. **HuggingFace caches to `$HOME/.cache/huggingface` by default, which breaks on clusters where
+   `$HOME` has a small quota** (also first hit on an NSCC DGX node -- downloading
+   `Qwen2.5-32B-Instruct`, ~65GB of weights alone, failed with `OSError: Disk quota exceeded`
+   partway through). NSCC's convention is that large files belong under `$HOME/scratch/`, not
+   `$HOME` itself (see `docs/remote_compute_workflow.md`). `serve.sh` does **not** default `HF_HOME`
+   to a project-relative path itself -- doing so would silently orphan whatever's already cached at
+   a machine's real default (this dev machine included, which already has a working
+   `~/.cache/huggingface`). It only warns when `$HOME` and the project directory are on different
+   filesystems (a `stat -c %d` comparison), since that's the concrete condition this problem needs.
+   Set `HF_HOME` yourself before running `serve.sh` when that warning fires, e.g.
+   `export HF_HOME=~/scratch/hf_cache`.
 
 ## Connecting from inspect_ai
 

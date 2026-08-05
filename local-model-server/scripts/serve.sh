@@ -19,6 +19,21 @@
 #   NUM_SPECULATIVE_TOKENS    (default: 5, only used when SPECULATIVE_MODE=ngram)
 #   NGRAM_PROMPT_LOOKUP_MAX   (default: 4, only used when SPECULATIVE_MODE=ngram)
 #   NGRAM_PROMPT_LOOKUP_MIN   (default: 1, only used when SPECULATIVE_MODE=ngram)
+#   HF_HOME                   (default: unset -- HuggingFace's own default, $HOME/.cache/huggingface)
+#                             On clusters with a small $HOME quota and a much larger scratch quota
+#                             (hit for real on an NSCC DGX node downloading Qwen2.5-32B-Instruct --
+#                             "OSError: Disk quota exceeded"), set this to a scratch-space path
+#                             BEFORE running this script, e.g.:
+#                               export HF_HOME=~/scratch/hf_cache   # NSCC convention: large files
+#                               go under $HOME/scratch/, not $HOME itself -- see
+#                               docs/remote_compute_workflow.md
+#                             This script does NOT default HF_HOME to a project-relative path
+#                             itself, on purpose -- doing so would silently orphan whatever's
+#                             already cached at the machine's real default on every machine that
+#                             already has a working cache there (this dev machine included). It
+#                             only warns (see below) when $HOME and this project's own directory
+#                             look like they're on different filesystems, since that's the
+#                             concrete condition under which this class of quota problem occurs.
 #
 # Note: this vLLM version (0.6.3.post1) does not expose any speculative-decoding-specific
 # Prometheus metrics on /metrics (checked directly -- only the generic num_preemptions_total
@@ -66,6 +81,23 @@ if [[ -n "${CUDA_VISIBLE_DEVICES:-}" && ! "$CUDA_VISIBLE_DEVICES" =~ ^[0-9]+(,[0
   echo "which this vLLM version can't parse. Remapping to \"$_cvd_new\" (safe under PBS/Slurm" >&2
   echo "cgroup-based GPU isolation -- see this comment in serve.sh for why)." >&2
   export CUDA_VISIBLE_DEVICES="$_cvd_new"
+fi
+
+# Heuristic warning for the disk-quota class of problem (see HF_HOME in the header comment): if
+# $HOME and this project's own directory are on different filesystems, a small $HOME quota is a
+# real risk for large model downloads (hit for real: Qwen2.5-32B-Instruct is ~65GB, blew a DGX
+# node's $HOME quota mid-download). Only warns -- does not set HF_HOME itself, see header comment
+# for why.
+if [[ -z "${HF_HOME:-}" ]] && command -v stat >/dev/null 2>&1; then
+  _home_dev="$(stat -c %d "$HOME" 2>/dev/null || echo "")"
+  _proj_dev="$(stat -c %d "$PWD" 2>/dev/null || echo "")"
+  if [[ -n "$_home_dev" && -n "$_proj_dev" && "$_home_dev" != "$_proj_dev" ]]; then
+    echo "NOTE: \$HOME ($HOME) and this project's directory ($PWD) are on different filesystems." >&2
+    echo "If \$HOME has a small quota (common on shared clusters), a large model download can" >&2
+    echo "fail with \"Disk quota exceeded\" -- HuggingFace caches to \$HOME/.cache/huggingface by" >&2
+    echo "default. Set HF_HOME to a path with more space before running this script if that" >&2
+    echo "happens, e.g.: export HF_HOME=~/scratch/hf_cache (NSCC convention)" >&2
+  fi
 fi
 
 mkdir -p logs
