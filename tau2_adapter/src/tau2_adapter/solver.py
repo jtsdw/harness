@@ -1,4 +1,4 @@
-"""The inspect_ai Solver that drives a real tau2-bench simulation for one Sample.
+"""The inspect_ai Solver that drives a real tau2 simulation for one Sample.
 
 Per sample: builds a real tau2 `Environment`, a real tau2 `UserSimulator` (unmodified, its model
 calls go through tau2's own LiteLLM path -- we deliberately do not trace the user simulator, only
@@ -16,26 +16,22 @@ import os
 
 import anyio.to_thread
 from inspect_ai.solver import Generate, Solver, TaskState, solver
-from tau2.data_model.tasks import Task
-from tau2.domains.mock.environment import get_environment, get_tasks
+from tau2.config import DEFAULT_MAX_ERRORS, DEFAULT_MAX_STEPS, DEFAULT_SEED
 from tau2.orchestrator.orchestrator import Orchestrator
+from tau2.runner.build import build_user
 from tau2.runner.simulation import run_simulation
-from tau2.user.user_simulator import UserSimulator
 
 from tau2_adapter.agent import InspectAIAgent
-
-_TASKS_BY_ID: dict[str, Task] | None = None
-
-
-def _tasks_by_id() -> dict[str, Task]:
-    global _TASKS_BY_ID
-    if _TASKS_BY_ID is None:
-        _TASKS_BY_ID = {t.id: t for t in get_tasks()}
-    return _TASKS_BY_ID
+from tau2_adapter.runtime import (
+    AUTO_TASK_SPLIT,
+    build_domain_environment,
+    json_object_from_env,
+    load_domain_tasks,
+)
 
 
 def _user_llm_args() -> dict:
-    args: dict = {"temperature": 0.0}
+    args: dict = {"temperature": 0.0, **json_object_from_env("TAU2_USER_LLM_ARGS")}
     api_base = os.environ.get("TAU2_USER_API_BASE")
     if api_base:
         args["api_base"] = api_base
@@ -46,34 +42,55 @@ def _user_llm_args() -> dict:
 
 
 @solver
-def tau2_mock_solver() -> Solver:
-    max_steps = int(os.environ.get("TAU2_MAX_STEPS", "20"))
+def tau2_solver(
+    domain: str = "mock",
+    task_set: str | None = None,
+    task_split: str | None = AUTO_TASK_SPLIT,
+) -> Solver:
+    """Create a solver for any registry-backed half-duplex tau2 domain."""
+    max_steps = int(os.environ.get("TAU2_MAX_STEPS", str(DEFAULT_MAX_STEPS)))
+    max_errors = int(os.environ.get("TAU2_MAX_ERRORS", str(DEFAULT_MAX_ERRORS)))
+    seed = int(os.environ.get("TAU2_SEED", str(DEFAULT_SEED)))
+    timeout_raw = os.environ.get("TAU2_TIMEOUT", "").strip()
+    timeout = float(timeout_raw) if timeout_raw else None
     user_model = os.environ.get("TAU2_USER_MODEL", "openai/Qwen/Qwen2.5-3B-Instruct")
+    tasks_by_id = {
+        task.id: task for task in load_domain_tasks(domain, task_set, task_split)
+    }
 
     async def solve(state: TaskState, generate: Generate) -> TaskState:
         task_id = state.metadata["tau2_task_id"]
-        task = _tasks_by_id()[task_id]
+        if state.metadata.get("tau2_domain") != domain:
+            raise ValueError(
+                f"Sample domain {state.metadata.get('tau2_domain')!r} does not match "
+                f"solver domain {domain!r}"
+            )
+        task = tasks_by_id[task_id]
 
-        environment = get_environment()
+        environment = build_domain_environment(domain, task)
         # Agent model comes from inspect_ai's own active model (--model/-M on the eval() CLI),
         # not a separate adapter-specific config -- see InspectAIAgent's docstring.
         agent = InspectAIAgent(
             tools=environment.get_tools(),
             domain_policy=environment.get_policy(),
         )
-        user = UserSimulator(
+        user = build_user(
+            "user_simulator",
+            environment,
+            task,
             llm=user_model,
-            instructions=task.user_scenario.instructions,
-            tools=environment.get_user_tools(),
             llm_args=_user_llm_args(),
         )
         orchestrator = Orchestrator(
-            domain="mock",
+            domain=domain,
             agent=agent,
             user=user,
             environment=environment,
             task=task,
             max_steps=max_steps,
+            max_errors=max_errors,
+            seed=seed,
+            timeout=timeout,
         )
 
         # run_simulation() is tau2's own library entry point: runs the orchestrator loop AND
@@ -88,11 +105,20 @@ def tau2_mock_solver() -> Solver:
         state.store.set("tau2_reward", reward_info.reward if reward_info else 0.0)
         state.store.set(
             "tau2_reward_basis",
-            [r.value for r in reward_info.reward_basis] if reward_info and reward_info.reward_basis else [],
+            [r.value for r in reward_info.reward_basis]
+            if reward_info and reward_info.reward_basis
+            else [],
         )
         state.store.set("tau2_termination_reason", simulation.termination_reason.value)
         state.store.set("tau2_duration_seconds", simulation.duration)
+        state.store.set("tau2_domain", domain)
         state.completed = True
         return state
 
     return solve
+
+
+@solver
+def tau2_mock_solver() -> Solver:
+    """Backward-compatible mock-domain solver alias."""
+    return tau2_solver(domain="mock")

@@ -788,7 +788,7 @@ wheels = [
 [[package]]
 name = "inspect-trace"
 version = "0.1.0"
-source = { directory = "../inspect_trace" }
+source = { editable = "../inspect_trace" }
 dependencies = [
     { name = "anyio" },
     { name = "httpx" },
@@ -1858,8 +1858,8 @@ wheels = [
 
 [[package]]
 name = "tau2"
-version = "1.0.1"
-source = { directory = "/home/liuyingen/code/tau2-bench" }
+version = "1.0.0"
+source = { editable = "../.deps/tau2-bench" }
 dependencies = [
     { name = "addict" },
     { name = "deepdiff" },
@@ -1956,10 +1956,10 @@ dev = [
 requires-dist = [
     { name = "anyio" },
     { name = "inspect-ai" },
-    { name = "inspect-trace", directory = "../inspect_trace" },
+    { name = "inspect-trace", editable = "../inspect_trace" },
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "tau2", directory = "/home/liuyingen/code/tau2-bench" },
+    { name = "tau2", editable = "../.deps/tau2-bench" },
 ]
 provides-extras = ["dev"]
 

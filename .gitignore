@@ -14,6 +14,13 @@
 **/.pytest_cache/
 **/.ruff_cache/
 
+# Reproducibly provisioned third-party source trees (see tau2_adapter setup).
+/.deps/
+
+# Workstation-only RTX 5090/Qwen runner. Keep it on the local machine; the
+# shared adapter and NSCC deployment must not depend on this execution profile.
+/tau2_qwen27b_local/
+
 # inspect_trace's own derived JSONL output (only meaningful alongside a specific run's .eval log)
 **/.inspect_trace/
 
@@ -21,6 +28,7 @@
 # inspect_trace's test suite / doc examples from inspect_trace/ writes to ./logs by default
 local-model-server/logs/
 inspect_trace/logs/
+/logs/
 
 # Experiment data: real .eval logs + inspect_trace JSONL from real benchmark runs.
 # Not tracked -- it's large and regenerable, but NOT disposable: see runs/ in

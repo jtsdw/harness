@@ -21,8 +21,8 @@ dependencies = [
 ]
 
 [tool.uv.sources]
-inspect_trace = { path = "../inspect_trace" }
-tau2 = { path = "/home/liuyingen/code/tau2-bench" }
+inspect_trace = { path = "../inspect_trace", editable = true }
+tau2 = { path = "../.deps/tau2-bench", editable = true }
 
 [project.entry-points.inspect_ai]
 tau2_adapter = "tau2_adapter._registry"

@@ -3,8 +3,8 @@
 Why this needs a sync/async bridge: `tau2.orchestrator.orchestrator.Orchestrator.run()`/`step()`
 are synchronous (blocking) methods -- see BaseOrchestrator in tau2's own source. But
 `inspect_ai.model.Model.generate()` is async, and critically, `inspect_trace`'s Hooks only fire
-inside inspect_ai's own Sample-execution context (`sample_active()` must be set -- see
-`/home/liuyingen/code/inspect_ai/src/inspect_ai/hooks/_hooks.py`'s `emit_sample_event()` guard).
+inside inspect_ai's own Sample-execution context (`sample_active()` must be set by
+inspect_ai's `emit_sample_event()` guard).
 So the `generate()` call has to happen on the same asyncio/anyio task that inspect_ai's own eval
 loop is running -- not in a detached thread with its own fresh state.
 

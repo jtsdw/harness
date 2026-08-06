@@ -1,29 +1,40 @@
-"""Builds an inspect_ai Dataset from tau2-bench's own `mock` domain tasks.
-
-Reuses `tau2.domains.mock.environment.get_tasks()` (tau2's own task loader, reads
-`data/tau2/domains/mock/tasks.json`) rather than re-parsing the JSON ourselves, so there's no risk
-of the Sample's task diverging from what tau2's own CLI would load for the same domain.
-
-Each Sample only carries the task id in metadata -- the solver re-fetches the full tau2 `Task`
-object from `get_tasks()` by id rather than round-tripping it through Sample.metadata
-(model_dump/model_validate), since the task objects are small, fixed, and cheap to reload, and
-this avoids any risk of a serialization mismatch silently producing a different task.
-"""
+"""Build inspect_ai datasets from tau2's registry-backed task sets."""
 
 from __future__ import annotations
 
 from inspect_ai.dataset import Dataset, MemoryDataset, Sample
-from tau2.domains.mock.environment import get_tasks
+
+from tau2_adapter.runtime import AUTO_TASK_SPLIT, load_domain_tasks, resolved_selection
 
 
-def mock_dataset() -> Dataset:
-    tasks = get_tasks()
+def tau2_dataset(
+    domain: str = "mock",
+    task_set: str | None = None,
+    task_split: str | None = AUTO_TASK_SPLIT,
+) -> Dataset:
+    """Create one Inspect sample per task selected by tau2 itself."""
+    tasks = load_domain_tasks(domain, task_set, task_split)
+    resolved_task_set, resolved_task_split = resolved_selection(
+        domain, task_set, task_split
+    )
     samples = [
         Sample(
-            input=task.ticket or (task.description.purpose if task.description else task.id),
+            input=task.ticket
+            or (task.description.purpose if task.description else None)
+            or task.id,
             id=task.id,
-            metadata={"tau2_task_id": task.id},
+            metadata={
+                "tau2_domain": domain,
+                "tau2_task_id": task.id,
+                "tau2_task_set": resolved_task_set,
+                "tau2_task_split": resolved_task_split or "all",
+            },
         )
         for task in tasks
     ]
-    return MemoryDataset(samples=samples, name="tau2_mock")
+    return MemoryDataset(samples=samples, name=f"tau2_{domain}")
+
+
+def mock_dataset() -> Dataset:
+    """Backward-compatible mock-domain dataset alias."""
+    return tau2_dataset(domain="mock")

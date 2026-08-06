@@ -1,6 +1,4 @@
-"""Assembles the inspect_ai Task: tau2 mock-domain dataset + the sync/async-bridged solver +
-a scorer that reports the real reward tau2's own evaluator computed (not a re-derived one).
-"""
+"""Assemble a registry-backed tau2 Inspect task and its real reward scorer."""
 
 from __future__ import annotations
 
@@ -8,8 +6,9 @@ from inspect_ai import Task, task
 from inspect_ai.scorer import Score, Scorer, Target, accuracy, scorer, stderr
 from inspect_ai.solver import TaskState
 
-from tau2_adapter.dataset import mock_dataset
-from tau2_adapter.solver import tau2_mock_solver
+from tau2_adapter.dataset import tau2_dataset
+from tau2_adapter.runtime import AUTO_TASK_SPLIT
+from tau2_adapter.solver import tau2_solver
 
 
 @scorer(metrics=[accuracy(), stderr()])
@@ -28,6 +27,7 @@ def tau2_reward_scorer() -> Scorer:
                 "tau2_reward_basis": state.store.get("tau2_reward_basis"),
                 "tau2_termination_reason": state.store.get("tau2_termination_reason"),
                 "tau2_duration_seconds": state.store.get("tau2_duration_seconds"),
+                "tau2_domain": state.store.get("tau2_domain"),
             },
         )
 
@@ -35,9 +35,14 @@ def tau2_reward_scorer() -> Scorer:
 
 
 @task
-def tau2_mock() -> Task:
+def tau2(
+    domain: str = "mock",
+    task_set: str | None = None,
+    task_split: str | None = AUTO_TASK_SPLIT,
+) -> Task:
+    """Run a tau2 domain while tracing only the agent-under-test model calls."""
     return Task(
-        dataset=mock_dataset(),
-        solver=tau2_mock_solver(),
+        dataset=tau2_dataset(domain, task_set, task_split),
+        solver=tau2_solver(domain, task_set, task_split),
         scorer=tau2_reward_scorer(),
     )
