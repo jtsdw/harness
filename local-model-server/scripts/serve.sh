@@ -61,10 +61,11 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 # ~/scratch/harness/ convention, not just this dev machine's /home/liuyingen/code/efficient-harness/).
 INSPECT_TRACE_PROJECT_DIR="$(cd "$(pwd)/../inspect_trace" && pwd)"
 
+export HF_HOME=/home/users/ntu/n2505716/scratch/model/.hf-cache
 export PATH="$HOME/.local/bin:$PATH"
-: "${MODEL:=Qwen/Qwen2.5-3B-Instruct}"
+: "${MODEL:=Qwen/Qwen2.5-32B-Instruct}"
 : "${PORT:=8000}"
-: "${GPU_MEMORY_UTILIZATION:=0.85}"
+: "${GPU_MEMORY_UTILIZATION:=0.9}"
 : "${MAX_MODEL_LEN:=16384}"
 : "${NATIVE_TOOL_CALLING:=}"
 : "${SPECULATIVE_MODE:=}"
