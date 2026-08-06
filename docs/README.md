@@ -31,8 +31,9 @@
 | 17 | [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) | 目标五的持续积累清单：已完成分析 SPORK（论文说的问题为什么在我们数据里没出现）+ ToolSpec（用真实 token 层数据算出论文没给的 tool-call token 占比 17.5%，换算出更保守的整体收益估算）+ 9 篇候选论文（LLMCompiler/ReWOO/SGLang/Preble/StreamingLLM/H2O/LLMLingua/FrugalGPT/Speculative Actions）分类和优先级建议 | 读完 11（roadmap），想知道外部方法能不能落进我们的干预接口时看 |
 | 17b | [`toolspec_integration_findings.md`](./toolspec_integration_findings.md) | ToolSpec 原生复现（五种方法真实速度对比，发现"并非严格 lossless"的真实特性）+ 迁移进 harness（自定义 `ModelAPI` provider，因为它是原始 HF transformers 生成循环不是 HTTP 服务）+ 二次复现，逐 token 精确对齐原生仓库输出 | 读完 17，想看具体接入案例时看 |
 | 17c | [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md) | ToolSpec vs vLLM 自带 ngram 投机解码的真实对比：ToolSpec 领域特定方法比通用方法快约 60%、偏离率更低；顺带发现一个 `inspect_trace` 的 `vllm_metrics` 采集器在某些场景下完全不产出记录的真实 bug，跟 `goal2_real_validation_findings.md` 的既有结论有未解决的冲突 | 读完 17b，想知道跟 vLLM 自带能力比怎么样时看 |
+| 17d | [`nscc_h100_speculative_decoding_plan.md`](./nscc_h100_speculative_decoding_plan.md) | NSCC H100 节点投机解码策略：为什么本地开发机的 vLLM 版本约束在那边不成立、为什么升级能用上 EAGLE-3（真实发布数据 3.0-3.4x）、为什么要换模型才有现成草稿 checkpoint——**设计阶段产出，`nscc_model_server/` 还没在真实硬件上跑通**，如实标注 | 要在 NSCC 上做投机解码实验时看，注意"待现场验证"清单 |
 
-读完这 21 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
+读完这 22 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
 ## 按用途查找
 
@@ -56,7 +57,8 @@
 - BFCL/GSM8K 复现脚本：`../inspect_trace/scripts/run_bfcl_benchmark.sh`、`run_gsm8k_benchmark.sh`
 - `goal1_r3_r4_dashboard.html` 生成脚本：`../inspect_trace/scripts/build_r3_r4_dashboard.py` + `_dashboard_template.html`，用法见 [`goal1_dashboard_guide.md`](./goal1_dashboard_guide.md)
 - 目标二三层 profiling 实现：`inspect_trace/vllm_metrics.py`（model invocation 层实时采集）+ `inspect_trace/analysis/{token_layer,episode_layer,pricing}.py`（token/episode 层离线分析），自带测试 `tests/test_vllm_metrics.py`/`test_analysis_layers.py`
-- 本地模型服务：`../local-model-server/`，自带 `README.md` + `scripts/{setup,serve,stop}.sh`
+- 本地模型服务（这台开发机专用，vLLM 锁死在 `0.6.3.post1`）：`../local-model-server/`，自带 `README.md` + `scripts/{setup,serve,stop}.sh`
+- NSCC H100 节点的模型服务（独立项目，不锁旧版本 vLLM，EAGLE-3 投机解码；**还没在真实硬件上跑通**，见 [`nscc_h100_speculative_decoding_plan.md`](./nscc_h100_speculative_decoding_plan.md)）：`../nscc_model_server/`
 - tau2-bench 适配器（第三方 benchmark 接入示例，OpenAI-compatible 服务型）：`../tau2_adapter/`，自带 `scripts/{setup_tau2_bench,run_native_baseline,run_adapter}.sh`
 - ToolSpec 适配器（第三方加速方法接入示例，原始 HF transformers 生成循环型，自定义 `ModelAPI`）：`../toolspec_adapter/`，自带 `scripts/{setup_toolspec,run_native_repro,run_adapter}.sh`
 - ToolSpec 可视化面板生成脚本：`../inspect_trace/scripts/build_toolspec_dashboard.py`，产出 `toolspec_dashboard.html`，每次运行都现场从原始 run 数据重新计算
