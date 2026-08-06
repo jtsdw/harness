@@ -69,6 +69,24 @@ MODEL_NAME="Qwen/Qwen2.5-3B-Instruct" ./run_bfcl_local_vllm.sh
 cd ../../local-model-server && ./scripts/stop.sh
 ```
 
+### 验证某个 `serve_*.sh` 模式真的生效了（不只是"起来了"）
+
+`serve.sh`/`serve_baseline.sh` 是等价的（后者就是不加任何开关调用前者），验证过一个就不用重复验证另一个。剩下两个各有专门的验证脚本，不需要手动拼 curl/Python：
+
+```bash
+# serve_native_tool_calling.sh：确认服务端真的返回结构化 tool_calls，不是纯文本
+cd local-model-server
+./scripts/serve_native_tool_calling.sh
+MODEL=Qwen/Qwen2.5-3B-Instruct ./scripts/verify_native_tool_calling.sh   # 打印 PASS/FAIL
+./scripts/stop.sh
+
+# serve_ngram_speculative.sh：跑一遍 baseline 和 ngram 各自的真实 BFCL eval，对比真实 tokens/s
+# 这个脚本自己管理两次服务的起停，不需要你手动交替 serve/stop
+MODEL_NAME="Qwen/Qwen2.5-3B-Instruct" LIMIT=20 ./scripts/verify_ngram_speculative.sh
+```
+
+`verify_ngram_speculative.sh` 在仓库根目录的 `scripts/` 下（跨 `local-model-server`/`inspect_trace` 两个项目的编排脚本都放这里，参考 `scripts/pull_runs.sh`）。`LIMIT` 建议不要设太小——样本太少测出来的速度差异全是噪声，看不出真实加速比。
+
 跟 ToolSpec 的真实对比（速度、正确性）见 [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md)。
 
 ## 为什么分两个环境
