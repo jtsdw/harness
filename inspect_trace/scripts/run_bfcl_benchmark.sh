@@ -44,11 +44,18 @@ set -euo pipefail
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$PKG_ROOT/.." && pwd)"
 
-: "${MODEL:=openai/deepseek-chat}"
-: "${MODEL_ARGS:=}"
+export XDG_CACHE_HOME=/home/users/ntu/n2505716/scratch/xdg_cache
+
+
+
+: "${MODEL:="openai-api/vllm/Qwen/Qwen2.5-32B-Instruct"}"
+: "${MODEL_ARGS:="emulate_tools=true"}"
 : "${CATEGORIES:=multi_turn_base}"
-: "${LIMIT:=2}"
-: "${MAX_CONNECTIONS:=}"
+: "${VLLM_BASE_URL="http://localhost:8000/v1"}"
+: "${VLLM_API_KEY="not-needed"}"
+export VLLM_BASE_URL VLLM_API_KEY
+: "${LIMIT:=200}"
+: "${MAX_CONNECTIONS:=1}"
 : "${OUTPUT_DIR:=${REPO_ROOT}/runs/goal1_bfcl_${CATEGORIES//,/_}}"
 
 if [[ "$MODEL" == openai/* && -z "${OPENAI_API_KEY:-}" ]]; then
