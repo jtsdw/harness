@@ -108,6 +108,14 @@ MODEL_NAME="Qwen/Qwen2.5-3B-Instruct" LIMIT=20 ./scripts/verify_ngram_speculativ
 
 跟 ToolSpec 的真实对比（速度、正确性）见 [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md)。
 
+### 复现目标一/目标二的可视化面板（`goal1_r3_r4_dashboard.html`）
+
+```bash
+./scripts/reproduce_goal1_goal2_dashboard.sh
+```
+
+一个脚本跑完三个真实 run（`multi_turn_base` 200 样本、`live_parallel` 15 样本、`goal2_vllm_metrics_validation` 8 样本，耗时大头是第一个 ~1 小时）再生成面板，幂等——某个 run 的 `.eval` 已经存在就跳过，不会重复跑。细节和面板每个分区对应哪部分数据见 [`goal1_dashboard_guide.md`](./goal1_dashboard_guide.md)。
+
 ## 为什么分两个环境
 
 `local-model-server` 的依赖（`vllm`/`torch`/CUDA runtime 库）被这台机器的 GPU 驱动（535.230.02，最高支持 CUDA 12.2）严格限定了版本范围，`torch==2.4.0`（CUDA 12.1 wheel）是能用的上限。如果跟 `inspect_trace` 装进同一个环境，任何一边升级依赖都可能连带把这套精确版本组合搞坏。分开之后，`inspect_trace` 环境可以自由升级，不用管 GPU 驱动这件事。完整踩坑记录见 [`local_model_deployment.md`](./local_model_deployment.md)。

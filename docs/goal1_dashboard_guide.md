@@ -76,7 +76,15 @@
 - `runs/goal1_bfcl_live_parallel_full/`（同上，15 样本全量；对应 `LIVE_PARALLEL_RUN_DIR`）
 - `runs/goal2_vllm_metrics_validation/`（8 样本，唯一带 `vllm_metrics` 记录的 run，只喂目标二的 model invocation 层；对应 `GOAL2_VLLM_METRICS_RUN_DIR`）
 
-重新生成面板（比如跑了新的 run、想更新数据）：
+**从零复现三个 run + 生成面板**（新机器、或者三个 `runs/` 目录还不存在时），一个脚本包完：
+
+```bash
+./scripts/reproduce_goal1_goal2_dashboard.sh
+```
+
+自动起本地 vLLM、依次跑三个 run（`multi_turn_base` 200 样本 ~1 小时是耗时大头、`live_parallel` 15 样本、`goal2_vllm_metrics_validation` 8 样本）、停服务、生成面板。**幂等**——每个 run 只要 `runs/<name>/logs/` 下已经有 `.eval` 文件就跳过，不会重复跑已经有真实数据的部分；只想重新生成面板本身（比如改了 `build_r3_r4_dashboard.py` 但三个 run 数据没变）就正常跑这个脚本，会自动全部跳过直接进入生成面板这一步。想强制全部重新跑：`FORCE_RERUN=true ./scripts/reproduce_goal1_goal2_dashboard.sh`。
+
+只想单独重新生成面板（三个 `runs/` 目录已经存在，不需要脚本帮你判断要不要重新跑）：
 
 ```bash
 cd /home/liuyingen/code/efficient-harness/inspect_trace
