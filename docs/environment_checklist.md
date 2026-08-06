@@ -24,15 +24,14 @@
 cd local-model-server
 ./scripts/serve.sh   # 或 serve_baseline.sh / serve_native_tool_calling.sh / serve_ngram_speculative.sh，见下方 vLLM 投机解码一节
 
-MODEL="openai-api/vllm/Qwen/Qwen2.5-3B-Instruct" MODEL_ARGS="emulate_tools=true" \
-VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" MAX_CONNECTIONS=1 \
-  ../inspect_trace/scripts/run_bfcl_benchmark.sh
-# 换成 run_gsm8k_benchmark.sh 跑 GSM8K，接口一样
+cd ../inspect_trace/scripts
+MODEL_NAME="Qwen/Qwen2.5-3B-Instruct" ./run_bfcl_local_vllm.sh
+# 换成 run_gsm8k_local_vllm.sh 跑 GSM8K，接口一样；MODEL_NAME 换成你实际在跑的模型
 
-./scripts/stop.sh    # 跑完记得停，释放显存
+cd ../../local-model-server && ./scripts/stop.sh    # 跑完记得停，释放显存
 ```
 
-`run_bfcl_benchmark.sh`/`run_gsm8k_benchmark.sh` 自己头部注释里有完整的可选参数说明（`CATEGORIES`/`LIMIT`/`OUTPUT_DIR`/`MAX_CONNECTIONS` 等）。
+`run_bfcl_local_vllm.sh`/`run_gsm8k_local_vllm.sh` 是薄包装脚本——只负责把连本地 vLLM 需要的那些环境变量（`VLLM_BASE_URL`/`VLLM_API_KEY`/`MAX_CONNECTIONS`/`MODEL_ARGS`）设好并正确 `export`，然后调用真正的 `run_bfcl_benchmark.sh`/`run_gsm8k_benchmark.sh`。**不要直接改这两个共享脚本本身去写死模型名**——改了要么被下次 `git pull` 覆盖，要么冲突，而且脚本内部用 `: "${VAR=value}"` 这种写法设的值不会自动 `export` 给子进程，这两个坑都真实踩过。想连托管 API（不是本地 vLLM）或者要用 `CATEGORIES`/`LIMIT`/`OUTPUT_DIR` 这些参数，直接调用底层的 `run_bfcl_benchmark.sh`/`run_gsm8k_benchmark.sh`，用法见它们各自的头部注释。
 
 ### tau2-bench（需要先装 `tau2_adapter` 环境）
 
@@ -64,11 +63,10 @@ NUM_QUESTIONS=100 METHODS="baseline pld recycling samd toolspec" ./run_native_re
 cd local-model-server
 ./scripts/serve_ngram_speculative.sh   # 起服务，n-gram/prompt-lookup 模式，不需要额外草稿模型
 
-MODEL="openai-api/vllm/Qwen/Qwen2.5-3B-Instruct" MODEL_ARGS="emulate_tools=true" \
-VLLM_BASE_URL="http://localhost:8000/v1" VLLM_API_KEY="not-needed" MAX_CONNECTIONS=1 \
-  ../inspect_trace/scripts/run_bfcl_benchmark.sh
+cd ../inspect_trace/scripts
+MODEL_NAME="Qwen/Qwen2.5-3B-Instruct" ./run_bfcl_local_vllm.sh
 
-./scripts/stop.sh
+cd ../../local-model-server && ./scripts/stop.sh
 ```
 
 跟 ToolSpec 的真实对比（速度、正确性）见 [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md)。
