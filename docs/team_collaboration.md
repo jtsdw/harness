@@ -20,7 +20,7 @@
 - **各自独立 checkout**：`scratch/harness-<你的用户名>/`、`scratch/harness-<对方用户名>/`——见 [`remote_compute_workflow.md`](./remote_compute_workflow.md#各自独立-checkout不共享同一份工作目录)，避免一个人 `git pull`/跑长 job 时干扰另一个人的工作目录。
 - **起长时间占用 GPU 的任务前，跟对方说一声**（哪怕只是一句话）——尤其是交互式常驻 vLLM 会话（`nscc_interactive_gpu_session.sh`），这类会话会一直占着分配直到手动结束，容易在忘记的情况下长期占用共享配额。
 - **`qstat` 先看一眼再提交**——提交新任务前确认没有已经在跑的、可能被误以为"没人用"而重复起的任务（比如两人都各自起了一个 vLLM 常驻服务，浪费配额）。
-- 结果数据（`runs/`）已经按各自 checkout 分开存放，不会互相覆盖；`scripts/pull_runs.sh` 默认拉自己那份，需要看对方的结果时改 `NSCC_REMOTE_SUBDIR` 指过去即可。
+- 结果数据（远程各自的 `runs/`）已经按各自 checkout 分开存放，不会互相覆盖；`scripts/pull_runs.sh` 默认拉自己那份到本地的 `nscc_runs/`，需要看对方的结果时改 `NSCC_REMOTE_SUBDIR` 指过去即可。
 
 ## 项目管理：复用现有 docs/ 体系，不新开一套
 

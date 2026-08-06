@@ -132,6 +132,7 @@ vLLM 现在只绑定 `localhost`。多人从各自机器访问同一台服务器
 | HuggingFace 模型权重缓存（~15GB） | 可选：如果不想重新下载，`rsync -avP ~/.cache/huggingface/ newserver:~/.cache/huggingface/`；不复制的话首次 `serve.sh` 会自动下载 |
 | uv 全局缓存（~25GB） | 不用复制，新服务器上会自己按需建立，而且旧缓存里很多是给旧 CUDA 版本编译的 wheel，对新服务器没用 |
 | `runs/`（实验原始数据，28MB，已 gitignore） | **必须手动复制**，不会跟着 git clone 走——这是所有 findings 文档的证据基础，建议 `rsync` 或打包成 tarball 一起搬，不要遗漏 |
+| `nscc_runs/`（从 NSCC 拉回来的结果，同样 gitignore，见 `nscc_runs/README.md`） | 同 `runs/`，必须手动复制；如果新服务器本身就是走 `scripts/pull_runs.sh` 从 NSCC 拉数据，也可以直接在新服务器上重新拉一遍，不一定要从旧服务器搬 |
 | API key / 密钥 | 不要复制任何文件，新服务器上按 `environment_checklist.md` 的方法重新 `export`/建私有 env 文件 |
 
 ## 待现场验证清单（汇总）

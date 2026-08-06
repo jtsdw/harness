@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Pulls runs/ (real .eval logs + inspect_trace JSONL, gitignored -- doesn't travel with git) back
-# from the NSCC compute node to this local machine, so the dashboard-generation scripts
-# (inspect_trace/scripts/build_*.py) can read them and produce a real-data report locally.
+# Pulls the NSCC compute node's runs/ (real .eval logs + inspect_trace JSONL, gitignored --
+# doesn't travel with git) back to this local machine, into nscc_runs/ -- deliberately NOT into
+# this repo's own runs/, which is for anything executed directly on this machine. See
+# nscc_runs/README.md for why that split exists. Once pulled, the dashboard-generation scripts
+# (inspect_trace/scripts/build_*.py) can point at nscc_runs/<name>/ same as they would runs/<name>/.
 #
 # Modeled directly on /home/liuyingen/code/quant/nscc2local.sh (same cluster, same rsync
 # preview/pull/delete pattern) -- see docs/remote_compute_workflow.md for the full picture of
@@ -21,7 +23,7 @@ set -euo pipefail
 REMOTE_HOST="${NSCC_SSH_ALIAS:-nscc}"
 REMOTE_SUBDIR="${NSCC_REMOTE_SUBDIR:-harness-$(whoami)}"
 REMOTE_DIR="/home/users/ntu/n2505716/scratch/${REMOTE_SUBDIR}/runs/"
-LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/runs/"
+LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/nscc_runs/"
 
 MODE="${1:-preview}"
 

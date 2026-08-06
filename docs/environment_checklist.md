@@ -131,7 +131,8 @@ MODEL_NAME="Qwen/Qwen2.5-3B-Instruct" LIMIT=20 ./scripts/verify_ngram_speculativ
 | GSM8K 数据集 | `~/.cache/huggingface/datasets/openai___gsm8k/` + `~/.cache/huggingface/hub/datasets--openai--gsm8k/` |
 | `Qwen2.5-3B-Instruct` 模型权重 | `~/.cache/huggingface/hub/`（vLLM/HuggingFace 标准缓存路径，首次 `serve.sh` 会自动下载，约 6GB） |
 | uv 包缓存（所有 uv 项目共享，硬链接去重） | `~/.cache/uv/` |
-| 实验原始产出（`.eval` 日志 + `inspect_trace` JSONL） | `/home/liuyingen/code/efficient-harness/runs/`（已 gitignore，不会被清理脚本删） |
+| 实验原始产出：本地跑的 | `/home/liuyingen/code/efficient-harness/runs/`（已 gitignore，不会被清理脚本删） |
+| 实验原始产出：从 NSCC 拉回来的 | `/home/liuyingen/code/efficient-harness/nscc_runs/`（同样 gitignore；跟本地 `runs/` 故意分开，见 `nscc_runs/README.md`，用 `scripts/pull_runs.sh` 拉取） |
 
 详见 [`datasets.md`](./datasets.md)。
 

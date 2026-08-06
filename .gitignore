@@ -26,3 +26,9 @@ inspect_trace/logs/
 # Not tracked -- it's large and regenerable, but NOT disposable: see runs/ in
 # deployment_migration_guide.md, it must be copied by hand when migrating servers.
 /runs/
+
+# Same as /runs/ above, but specifically results pulled from the NSCC compute node (see
+# nscc_runs/README.md for why this is a separate directory from /runs/). Keep the README tracked
+# so the directory's purpose survives a fresh clone even before anyone has pulled anything into it.
+/nscc_runs/*
+!/nscc_runs/README.md

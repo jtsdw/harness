@@ -37,15 +37,15 @@ git pull
 
 ## 结果拉取：`scripts/pull_runs.sh`
 
-`runs/`（真实实验数据：`.eval` 日志 + `inspect_trace` JSONL）已经 gitignore，不会跟着 git 走——这部分照抄 `/home/liuyingen/code/quant/nscc2local.sh` 的 rsync 风格单独处理：
+远程计算节点上的 `runs/`（真实实验数据：`.eval` 日志 + `inspect_trace` JSONL）已经 gitignore，不会跟着 git 走——这部分照抄 `/home/liuyingen/code/quant/nscc2local.sh` 的 rsync 风格单独处理，拉到本地的 **`nscc_runs/`**（不是本地自己的 `runs/`——两者故意分开，本地自己跑的实验放 `runs/`，从 NSCC 拉回来的放 `nscc_runs/`，避免本地临时跑的东西和真实跑在大卡上的结果混在一个目录分不清哪个是哪个，详见 [`nscc_runs/README.md`](../nscc_runs/README.md)）：
 
 ```bash
 ./scripts/pull_runs.sh preview   # 先看看会传什么，不真的传
-./scripts/pull_runs.sh pull      # 真的拉
+./scripts/pull_runs.sh pull      # 真的拉，落到 nscc_runs/
 ./scripts/pull_runs.sh delete    # 拉 + 删掉本地有但远程没有的（远程数据被清理过时用）
 ```
 
-默认按你的本地用户名拼出对应的远程 checkout 路径（`NSCC_REMOTE_SUBDIR` 环境变量可以覆盖）。拉回来之后本地跑 `inspect_trace/scripts/build_*.py` 生成可视化面板——生成面板这一步一直是本地做的，不需要在计算节点上跑。
+默认按你的本地用户名拼出对应的远程 checkout 路径（`NSCC_REMOTE_SUBDIR` 环境变量可以覆盖）。拉回来之后本地跑 `inspect_trace/scripts/build_*.py`/`build_eval_report.py`（换成指向 `nscc_runs/<name>/`）生成可视化面板——生成面板这一步一直是本地做的，不需要在计算节点上跑。
 
 ## 各自独立 checkout，不共享同一份工作目录
 
