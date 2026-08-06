@@ -44,15 +44,17 @@ set -euo pipefail
 PKG_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$PKG_ROOT/.." && pwd)"
 
-export XDG_CACHE_HOME=/home/users/ntu/n2505716/scratch/xdg_cache
+# uv's own package cache follows XDG_CACHE_HOME (defaults under $HOME otherwise) -- on a
+# quota-segmented cluster this can eat the same small $HOME quota as HF_HOME's problem (see
+# local-model-server/scripts/serve.sh). Only takes effect if not already set.
+: "${XDG_CACHE_HOME:=$HOME/scratch/xdg_cache}"
+export XDG_CACHE_HOME
 
-
-
-: "${MODEL:="openai-api/vllm/Qwen/Qwen2.5-32B-Instruct"}"
-: "${MODEL_ARGS:="emulate_tools=true"}"
+: "${MODEL:=openai-api/vllm/Qwen/Qwen2.5-32B-Instruct}"
+: "${MODEL_ARGS:=emulate_tools=true}"
 : "${CATEGORIES:=multi_turn_base}"
-: "${VLLM_BASE_URL="http://localhost:8000/v1"}"
-: "${VLLM_API_KEY="not-needed"}"
+: "${VLLM_BASE_URL:=http://localhost:8000/v1}"
+: "${VLLM_API_KEY:=not-needed}"
 export VLLM_BASE_URL VLLM_API_KEY
 : "${LIMIT:=200}"
 : "${MAX_CONNECTIONS:=1}"
