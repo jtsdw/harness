@@ -107,6 +107,7 @@ uv run --project "$PROJECT_DIR" inspect eval "task.py@tau2" \
   "${MODEL_FLAGS[@]}" \
   "${LIMIT_FLAGS[@]}" \
   --max-connections 1 \
+  --max-samples 1 \
   --log-dir "${OUTPUT_DIR}/logs"
 
 echo
