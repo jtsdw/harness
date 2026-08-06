@@ -18,6 +18,25 @@
 
 环境装好之后实际怎么跑——每一行都是可以直接复制执行的真实命令，不是需要手改的模板。
 
+### 看结果：不用 `inspect view`（不需要起服务、不需要端口映射）
+
+跑完任何一个 eval（BFCL/GSM8K/tau2-bench/ToolSpec 都适用），会得到一个 `.eval` 文件——这是压缩的二进制格式，直接 `cat` 是乱码，一般得靠 `inspect view` 起一个本地网页服务才能看，在远程计算节点上还得额外做 SSH 端口映射，不方便。
+
+更省事的办法：生成一个**自包含的 HTML 报告**，不需要起任何服务，`scp`/`rsync` 拉回本地或者直接在远程用浏览器打开都行：
+
+```bash
+cd inspect_trace
+uv run python scripts/build_eval_report.py ../runs/goal1_bfcl_multi_turn_base
+# 输出：../runs/goal1_bfcl_multi_turn_base/logs/<xxx>_report.html
+
+# 也可以指定具体某个 .eval 文件，或者自己指定输出路径：
+uv run python scripts/build_eval_report.py path/to/some.eval -o my_report.html
+```
+
+报告里有总览统计（样本数、分数、token 数）、逐样本结果表格、每条样本的完整对话和模型输出——数据全部来自 `read_eval_log()`，不是手填的。这是个**通用**报告，只看单次 run；如果要做"A 配置 vs B 配置"这种对比（比如 ToolSpec vs vLLM 投机解码那次），仍然要用专门写的对比脚本（`inspect_trace/scripts/build_tau2_dashboard.py`/`build_toolspec_dashboard.py` 这类），通用报告替代不了定制对比视图。
+
+`inspect view`/`inspect log dump`/`inspect log convert --to json` 这些原有手段仍然都能用，没有被这个脚本取代——只是多了一个更省事的选项。
+
 ### 跑 BFCL / GSM8K（最常用，只需要 `inspect_trace` + `local-model-server` 两个环境）
 
 ```bash
