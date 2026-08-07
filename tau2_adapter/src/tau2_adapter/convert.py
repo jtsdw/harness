@@ -26,6 +26,10 @@ from tau2.data_model.message import (
 from tau2.environment.tool import Tool as Tau2Tool
 
 
+class EmptyAssistantResponseError(ValueError):
+    """The provider returned neither assistant text nor tool calls."""
+
+
 def tau2_tool_to_tool_info(tool: Tau2Tool) -> ToolInfo:
     """tau2's `Tool.openai_schema` is already an OpenAI function-calling schema dict --
     `{"type": "function", "function": {"name", "description", "parameters"}}` -- the same
@@ -93,4 +97,11 @@ def model_output_to_tau2_assistant_message(output: ModelOutput) -> AssistantMess
         if msg.tool_calls
         else None
     )
-    return AssistantMessage(role="assistant", content=msg.text or None, tool_calls=tool_calls)
+    content = msg.text or None
+    if content is not None and not content.strip():
+        content = None
+    if content is None and tool_calls is None:
+        raise EmptyAssistantResponseError(
+            "Model returned an empty assistant response (no content or tool calls)."
+        )
+    return AssistantMessage(role="assistant", content=content, tool_calls=tool_calls)

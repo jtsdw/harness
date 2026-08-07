@@ -22,6 +22,8 @@ the model call.
 
 from __future__ import annotations
 
+import logging
+
 import anyio.from_thread
 from inspect_ai.model import Model, get_model
 from tau2.agent.base_agent import HalfDuplexAgent, ValidAgentInputMessage
@@ -30,10 +32,14 @@ from tau2.data_model.message import MultiToolMessage, SystemMessage
 from tau2.environment.tool import Tool
 
 from tau2_adapter.convert import (
+    EmptyAssistantResponseError,
     model_output_to_tau2_assistant_message,
     tau2_message_to_chat_message,
     tau2_tool_to_tool_info,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 class InspectAIAgent(HalfDuplexAgent[LLMAgentState]):
@@ -42,8 +48,16 @@ class InspectAIAgent(HalfDuplexAgent[LLMAgentState]):
     utility, so `inspect_trace`'s Hooks observe the agent-under-test's calls.
     """
 
-    def __init__(self, tools: list[Tool], domain_policy: str):
+    def __init__(
+        self,
+        tools: list[Tool],
+        domain_policy: str,
+        empty_response_retries: int = 3,
+    ):
         super().__init__(tools=tools, domain_policy=domain_policy)
+        if empty_response_retries < 0:
+            raise ValueError("empty_response_retries must be non-negative")
+        self._empty_response_retries = empty_response_retries
         self._tool_infos = [tau2_tool_to_tool_info(t) for t in tools]
         # No model/base_url/api_key here on purpose: get_model() with no arguments returns
         # inspect_ai's *active* model -- whatever --model/-M flags eval() was invoked with. That
@@ -80,11 +94,38 @@ class InspectAIAgent(HalfDuplexAgent[LLMAgentState]):
         # The actual bridge: hop back to the event loop that's running inside inspect_ai's own
         # Sample execution (see module docstring). This call blocks this worker thread until the
         # real model.generate() completes on the other side.
-        output = anyio.from_thread.run(self._generate, chat_messages)
-
-        assistant_message = model_output_to_tau2_assistant_message(output)
+        assistant_message = anyio.from_thread.run(
+            self._generate_assistant, chat_messages
+        )
         state.messages.append(assistant_message)
         return assistant_message, state
 
-    async def _generate(self, chat_messages: list) -> object:
-        return await self._model.generate(input=chat_messages, tools=self._tool_infos)
+    async def _generate_assistant(self, chat_messages: list):
+        """Generate a tau2-valid assistant message, retrying only empty responses.
+
+        An OpenAI-compatible backend can occasionally return a successful response with
+        usage metadata but neither content nor tool calls. Inspect treats that as a completed
+        model request, while tau2 correctly rejects it as an invalid AssistantMessage. Retrying
+        here preserves all normal provider errors and conversion failures while recovering from
+        that one safe-to-repeat, side-effect-free boundary case.
+        """
+        attempts = self._empty_response_retries + 1
+        for attempt in range(1, attempts + 1):
+            output = await self._model.generate(
+                input=chat_messages, tools=self._tool_infos
+            )
+            try:
+                return model_output_to_tau2_assistant_message(output)
+            except EmptyAssistantResponseError as exc:
+                if attempt == attempts:
+                    raise EmptyAssistantResponseError(
+                        "Model returned an empty assistant response after "
+                        f"{attempts} attempts."
+                    ) from exc
+                logger.warning(
+                    "Model returned an empty assistant response; retrying (%d/%d).",
+                    attempt,
+                    self._empty_response_retries,
+                )
+
+        raise AssertionError("unreachable")

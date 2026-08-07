@@ -22,12 +22,17 @@ from tau2.runner.build import build_user
 from tau2.runner.simulation import run_simulation
 
 from tau2_adapter.agent import InspectAIAgent
+from tau2_adapter.nl_assertions import configure_tau2_nl_assertions
 from tau2_adapter.runtime import (
     AUTO_TASK_SPLIT,
     build_domain_environment,
     json_object_from_env,
     load_domain_tasks,
 )
+
+
+EMPTY_RESPONSE_RETRIES_ENV = "TAU2_AGENT_MAX_EMPTY_RETRIES"
+LEGACY_EMPTY_RESPONSE_RETRIES_ENV = "TAU2_EMPTY_RESPONSE_RETRIES"
 
 
 def _user_llm_args() -> dict:
@@ -41,6 +46,16 @@ def _user_llm_args() -> dict:
     return args
 
 
+def _empty_response_retries() -> int:
+    raw = os.environ.get(EMPTY_RESPONSE_RETRIES_ENV)
+    if raw is None:
+        raw = os.environ.get(LEGACY_EMPTY_RESPONSE_RETRIES_ENV, "3")
+    retries = int(raw)
+    if retries < 0:
+        raise ValueError(f"{EMPTY_RESPONSE_RETRIES_ENV} must be non-negative")
+    return retries
+
+
 @solver
 def tau2_solver(
     domain: str = "mock",
@@ -50,6 +65,8 @@ def tau2_solver(
     """Create a solver for any registry-backed half-duplex tau2 domain."""
     max_steps = int(os.environ.get("TAU2_MAX_STEPS", str(DEFAULT_MAX_STEPS)))
     max_errors = int(os.environ.get("TAU2_MAX_ERRORS", str(DEFAULT_MAX_ERRORS)))
+    empty_response_retries = _empty_response_retries()
+    configure_tau2_nl_assertions()
     seed = int(os.environ.get("TAU2_SEED", str(DEFAULT_SEED)))
     timeout_raw = os.environ.get("TAU2_TIMEOUT", "").strip()
     timeout = float(timeout_raw) if timeout_raw else None
@@ -73,6 +90,7 @@ def tau2_solver(
         agent = InspectAIAgent(
             tools=environment.get_tools(),
             domain_policy=environment.get_policy(),
+            empty_response_retries=empty_response_retries,
         )
         user = build_user(
             "user_simulator",
