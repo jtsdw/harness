@@ -22,6 +22,9 @@ the model call.
 
 from __future__ import annotations
 
+import logging
+import os
+
 import anyio.from_thread
 from inspect_ai.model import Model, get_model
 from tau2.agent.base_agent import HalfDuplexAgent, ValidAgentInputMessage
@@ -34,6 +37,16 @@ from tau2_adapter.convert import (
     tau2_message_to_chat_message,
     tau2_tool_to_tool_info,
 )
+
+logger = logging.getLogger(__name__)
+
+# Max attempts when the model returns an empty generation (no text, no tool calls).
+# Qwen3.6 with thinking enabled occasionally emits a reasoning-only response with empty
+# content and no tool calls; tau2's AssistantMessage.validate() rejects that and would
+# abort the whole eval. Retrying the same prompt resolves it in practice.
+MAX_EMPTY_RETRIES = int(os.environ.get("TAU2_AGENT_MAX_EMPTY_RETRIES", "3"))
+if MAX_EMPTY_RETRIES < 0:
+    raise ValueError("TAU2_AGENT_MAX_EMPTY_RETRIES must be non-negative")
 
 
 class InspectAIAgent(HalfDuplexAgent[LLMAgentState]):
@@ -80,7 +93,22 @@ class InspectAIAgent(HalfDuplexAgent[LLMAgentState]):
         # The actual bridge: hop back to the event loop that's running inside inspect_ai's own
         # Sample execution (see module docstring). This call blocks this worker thread until the
         # real model.generate() completes on the other side.
-        output = anyio.from_thread.run(self._generate, chat_messages)
+        # Inspect the ModelOutput before constructing tau2's AssistantMessage: its validator
+        # rejects an empty message during construction, so checking afterwards is too late.
+        for retry in range(MAX_EMPTY_RETRIES + 1):
+            output = anyio.from_thread.run(self._generate, chat_messages)
+            if output.message.text or output.message.tool_calls:
+                break
+            if retry == MAX_EMPTY_RETRIES:
+                raise RuntimeError(
+                    "Agent returned an empty generation after "
+                    f"{MAX_EMPTY_RETRIES} retries"
+                )
+            logger.warning(
+                "Empty agent generation; retrying (%d/%d)",
+                retry + 1,
+                MAX_EMPTY_RETRIES,
+            )
 
         assistant_message = model_output_to_tau2_assistant_message(output)
         state.messages.append(assistant_message)
