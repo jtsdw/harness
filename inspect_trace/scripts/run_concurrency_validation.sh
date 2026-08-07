@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+# NOTE: for 需求 B5's actual minimal robustness matrix (concurrency x repetition grid, targeting
+# the NSCC deployment), see ./run_b5_matrix.sh instead -- this script is kept as-is because the
+# crash finding below is real historical evidence from this dev machine's old vLLM, not because
+# it's still the current way to run a B5-style check.
+#
 # Deliberately triggers real queueing/concurrency against the local vLLM server, to validate that
 # vllm_metrics.py's queue_depth_running_at_start / queue_depth_waiting_at_start / preemptions_delta
 # fields actually produce non-zero values under load.

@@ -234,12 +234,20 @@ class VLLMMetricsRecord(TraceEnvelope):
     methodology). Only emitted when the model being called is actually backed by a reachable
     vLLM `/metrics` endpoint -- absent entirely for hosted providers, not present-with-nulls."""
     model_event_uuid: str
+    source: Literal["server_prometheus"] = "server_prometheus"
+    """需求 B3: this record's evidence-tier label. Added after the fact (2026-08-07) alongside
+    `VLLMPerRequestMetricsRecord`'s `source="server_per_request"` -- B3 requires every metric to
+    carry a `source`, and this record kind existed before that requirement was written, so it
+    was missing one. Default value means every already-written record still parses fine; new
+    records get it automatically."""
     attribution_confidence: Literal["exact", "ambiguous", "no_new_observation"]
     """"exact": exactly one new histogram observation between the before/after scrape (requires
     serialized execution, i.e. --max-connections 1). "ambiguous": more than one observation
     landed in the window (concurrent calls), so the delta can't be attributed to this call alone.
     "no_new_observation": this call produced no new vLLM request at all (e.g. inspect_ai's own
-    local cache hit)."""
+    local cache hit). This is this record's `confidence` -- named `attribution_confidence`
+    instead of `confidence` for historical reasons (predates B3's generic naming); not renamed
+    here to avoid touching the 3 existing consumers that read this exact key."""
     ttft_seconds: float | None
     itl_seconds_avg: float | None
     e2e_latency_seconds: float | None
@@ -247,6 +255,43 @@ class VLLMMetricsRecord(TraceEnvelope):
     queue_depth_waiting_at_start: float | None
     gpu_cache_usage_perc_at_end: float | None
     preemptions_delta: float | None
+
+
+class VLLMPerRequestMetricsRecord(TraceEnvelope):
+    kind: Literal["vllm_per_request_metrics"] = "vllm_per_request_metrics"
+    """需求 B1/B2/B3: real per-request timing read from the new vLLM's own per-request metrics
+    API (not the Prometheus histogram-delta method `vllm_metrics.py`/`VLLMMetricsRecord` uses --
+    that method needs serialized execution to attribute correctly and breaks down under real
+    concurrency, see vllm_per_request_metrics.py's module docstring). Deliberately a separate
+    record kind rather than merged into `VLLMMetricsRecord`: B3 requires same-named metrics from
+    different sources to be kept side by side, not overwritten, and two joinable record kinds
+    (shared `model_event_uuid`) gives that for free."""
+    model_event_uuid: str
+    source: Literal["server_per_request"] = "server_per_request"
+    confidence: Literal["exact", "unattributed"]
+    """"exact": the response carried a real `serving_request_id` we can anchor to. "unattributed":
+    no serving_request_id was available (API not enabled, field missing, or request failed before
+    one was assigned) -- per B2, this must never be silently folded into a nearby call's numbers."""
+    serving_request_id: str | None
+    queue_time_seconds: float | None
+    ttft_seconds: float | None
+    prefill_time_seconds: float | None
+    decode_time_seconds: float | None
+    mean_itl_seconds: float | None
+    prompt_tokens: int | None
+    generated_tokens: int | None
+    cached_tokens: int | None
+    request_tokens_per_second: float | None
+    finish_reason: str | None
+    speculative_draft_tokens: int | None
+    speculative_accepted_tokens: int | None
+    speculative_acceptance_rate: float | None
+    guided_decoding_overhead_seconds: float | None
+    raw_fields_missing: list[str] = Field(default_factory=list)
+    """Names of fields this record expected to find in the real API response but didn't -- the
+    real response shape hasn't been verified against live NSCC hardware yet (see
+    vllm_per_request_metrics.py), so parsing is deliberately tolerant instead of assuming a shape
+    and crashing when it's wrong."""
 
 
 class ManifestRecord(BaseModel):
@@ -266,4 +311,5 @@ TraceRecord = Union[
     ExecutionTopologyRecord,
     ActionParsingRecord,
     VLLMMetricsRecord,
+    VLLMPerRequestMetricsRecord,
 ]

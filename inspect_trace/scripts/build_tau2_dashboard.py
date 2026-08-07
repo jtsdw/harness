@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Builds a real-data dashboard for the tau2-bench integration (see
-docs/tau2_bench_integration_findings.md for the full write-up).
+"""Builds a real-data dashboard for the tau2-bench integration.
+
+See docs/tau2_bench_integration_findings.md for the full write-up.
 
 Reads three real runs:
   - the native `tau2 run` CLI baseline (runs/tau2_native_baseline/)
@@ -24,6 +25,7 @@ import json
 from pathlib import Path
 
 from inspect_ai.log import read_eval_log
+
 from inspect_trace.analysis import episode_layer, token_layer
 from inspect_trace.analysis._loader import load_records_by_sample, records_of_kind
 
@@ -160,7 +162,8 @@ def extract_all() -> dict:
     all_records = [r for recs in by_sample.values() for r in recs]
     vllm_calls = records_of_kind(all_records, "vllm_metrics")
     attribution_by_event = {
-        r["model_event_uuid"]: r for r in records_of_kind(all_records, "token_attribution")
+        r["model_event_uuid"]: r
+        for r in records_of_kind(all_records, "token_attribution")
     }
     scatter = []
     for c in vllm_calls:
@@ -233,7 +236,9 @@ def extract_all() -> dict:
             "emulate_accuracy": emulate_acc,
             "native_tool_accuracy": native_tool_acc,
             "emulate_match_counts": summarize_match_counts(comparison, "emulate_match"),
-            "native_tool_match_counts": summarize_match_counts(comparison, "native_tool_match"),
+            "native_tool_match_counts": summarize_match_counts(
+                comparison, "native_tool_match"
+            ),
         },
         "comparison": comparison,
         "token_layer": {

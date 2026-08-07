@@ -126,6 +126,15 @@ def test_episode_layer_summarizes_real_hooks_output(
     assert episode.critical_path_latency_seconds == episode.end_to_end_latency_seconds
     assert episode.concurrency_savings_seconds == 0.0
     assert episode.n_retries == 0
+    # single-episode run: P50/P95 must equal the one latency value, and P99 must be withheld
+    # (fewer than episode_layer._P99_MIN_SAMPLES samples) per B 类验收标准's "样本不足时不报告 P99".
+    assert (
+        run_summary.p50_end_to_end_latency_seconds == episode.end_to_end_latency_seconds
+    )
+    assert (
+        run_summary.p95_end_to_end_latency_seconds == episode.end_to_end_latency_seconds
+    )
+    assert run_summary.p99_end_to_end_latency_seconds is None
 
 
 @tool(parallel=True)

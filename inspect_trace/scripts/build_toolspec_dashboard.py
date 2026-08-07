@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Builds a real-data dashboard for the ToolSpec integration (see
-docs/toolspec_integration_findings.md for the full write-up).
+"""Builds a real-data dashboard for the ToolSpec integration.
+
+See docs/toolspec_integration_findings.md for the full write-up.
 
 Reads real data from two sources:
   - ToolSpec's own native-repo reproduction output (/home/liuyingen/code/ToolSpec/output/
@@ -81,13 +82,17 @@ def speed_stats(records: dict[int, dict]) -> tuple[float, float]:
 
 def mismatches(base: dict[int, dict], other: dict[int, dict]) -> list[int]:
     return sorted(
-        qid for qid in base if base[qid]["choices"]["output"] != other[qid]["choices"]["output"]
+        qid
+        for qid in base
+        if base[qid]["choices"]["output"] != other[qid]["choices"]["output"]
     )
 
 
 def load_adapter_run(run_dir: Path) -> dict:
     eval_files = sorted((run_dir / "logs").glob("*.eval"))
-    assert len(eval_files) == 1, f"expected exactly one .eval in {run_dir}/logs, found {len(eval_files)}"
+    assert len(eval_files) == 1, (
+        f"expected exactly one .eval in {run_dir}/logs, found {len(eval_files)}"
+    )
     log = read_eval_log(str(eval_files[0]))
 
     per_sample_speeds: list[float] = []
@@ -103,14 +108,20 @@ def load_adapter_run(run_dir: Path) -> dict:
                 sample_time += resp.get("wall_time", 0.0) or 0.0
         if sample_time > 0:
             per_sample_speeds.append(sample_tokens / sample_time)
-        score = sample.scores.get("matches_reference_baseline") if sample.scores else None
+        score = (
+            sample.scores.get("matches_reference_baseline") if sample.scores else None
+        )
         if score is not None:
             if score.value == "C":
                 correct += 1
             else:
                 incorrect_qids.append(int(sample.metadata.get("question_id", -1)))
 
-    trace_files = list((run_dir / ".inspect_trace").glob("**/sample-*.jsonl")) if (run_dir / ".inspect_trace").exists() else []
+    trace_files = (
+        list((run_dir / ".inspect_trace").glob("**/sample-*.jsonl"))
+        if (run_dir / ".inspect_trace").exists()
+        else []
+    )
 
     # Same mean-of-per-question-ratios methodology as speed_stats() / evaluation/speed.py --
     # see that function's docstring for why this matters (not the same as ratio-of-sums).
@@ -127,16 +138,28 @@ def load_adapter_run(run_dir: Path) -> dict:
 
 
 def load_vllm_run(run_dir: Path) -> dict:
-    """Like load_adapter_run(), but for runs through the stock openai-api provider (vLLM HTTP
-    service, no/ngram speculative decoding). Speed comes from ModelEvent.working_time /
-    output.usage.output_tokens instead of our own provider's ModelCall.response dict (which only
-    exists for toolspec_adapter's custom ModelAPI), because inspect_trace's own vllm_metrics
-    collector produced zero records for these two runs -- see
+    """Like load_adapter_run(), but for runs through the stock openai-api provider.
+
+    (vLLM HTTP service, no/ngram speculative decoding). Speed comes from
+    ModelEvent.working_time / output.usage.output_tokens instead of ModelCall.response, because
+    inspect_trace's own vllm_metrics collector produced zero records for these two runs -- see
     docs/toolspec_vllm_speculative_comparison.md's "一个真实发现" section for the real bug found
     while trying to use it, and why this fallback is used instead.
+
+    correction (2026-08-07, found while building requirement B's per-request metrics collector):
+    the previous version of this docstring said ModelCall.response "only exists for
+    toolspec_adapter's custom ModelAPI" -- that's not the real mechanism. inspect_ai retains
+    `ModelEvent.call.response` for every provider by default, but only for a model's first 5
+    calls (`DEFAULT_LOG_MODEL_API_CALLS` in inspect_ai's own `_transcript.py`); every call after
+    that gets `event.call = None` unless the run sets `INSPECT_EVAL_LOG_MODEL_API=true`. None of
+    this project's run scripts set that, so these two vLLM runs (more than 5 calls per model)
+    simply hit the cap -- it looked custom-API-specific only because toolspec_adapter's runs
+    apparently didn't. See vllm_per_request_metrics.py's module docstring for the full finding.
     """
     eval_files = sorted((run_dir / "logs").glob("*.eval"))
-    assert len(eval_files) == 1, f"expected exactly one .eval in {run_dir}/logs, found {len(eval_files)}"
+    assert len(eval_files) == 1, (
+        f"expected exactly one .eval in {run_dir}/logs, found {len(eval_files)}"
+    )
     log = read_eval_log(str(eval_files[0]))
 
     per_sample_speeds: list[float] = []
@@ -147,7 +170,11 @@ def load_vllm_run(run_dir: Path) -> dict:
         for event in sample.events:
             if event.event == "model":
                 wt = event.working_time
-                out_tok = event.output.usage.output_tokens if event.output and event.output.usage else None
+                out_tok = (
+                    event.output.usage.output_tokens
+                    if event.output and event.output.usage
+                    else None
+                )
                 if wt and out_tok:
                     per_sample_speeds.append(out_tok / wt)
 
@@ -166,20 +193,29 @@ def truncate(s: str, n: int = 220) -> str:
 
 def esc(s: str) -> str:
     return (
-        s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        s.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
 
 
 def main() -> None:
     native = {name: load_native(name) for name in NATIVE_FILES}
 
-    native_determinism_mismatches = mismatches(native["baseline"], native["baseline_rerun"])
+    native_determinism_mismatches = mismatches(
+        native["baseline"], native["baseline_rerun"]
+    )
 
     native_speed_rows = []
     for method in ["baseline", "pld", "recycling", "samd", "toolspec"]:
         tps, mean_accept = speed_stats(native[method])
         baseline_tps, _ = speed_stats(native["baseline"])
-        mism = [] if method == "baseline" else mismatches(native["baseline"], native[method])
+        mism = (
+            []
+            if method == "baseline"
+            else mismatches(native["baseline"], native[method])
+        )
         native_speed_rows.append(
             {
                 "method": method,
@@ -207,10 +243,16 @@ def main() -> None:
         else 0.0
     )
 
-    native_toolspec_row = next(r for r in native_speed_rows if r["method"] == "toolspec")
-    native_baseline_row = next(r for r in native_speed_rows if r["method"] == "baseline")
+    native_toolspec_row = next(
+        r for r in native_speed_rows if r["method"] == "toolspec"
+    )
+    native_baseline_row = next(
+        r for r in native_speed_rows if r["method"] == "baseline"
+    )
 
-    same_mismatch_set = adapter_toolspec["incorrect_qids"] == native_toolspec_row["mismatch_qids"]
+    same_mismatch_set = (
+        adapter_toolspec["incorrect_qids"] == native_toolspec_row["mismatch_qids"]
+    )
 
     # a few concrete example mismatches, with real question/output text
     example_qids = native_toolspec_row["mismatch_qids"][:3]
@@ -226,19 +268,29 @@ def main() -> None:
             }
         )
 
-    lm_regular_b64 = base64.b64encode(LM_SANS_REGULAR.read_bytes()).decode() if LM_SANS_REGULAR.exists() else ""
-    lm_bold_b64 = base64.b64encode(LM_SANS_BOLD.read_bytes()).decode() if LM_SANS_BOLD.exists() else ""
+    lm_regular_b64 = (
+        base64.b64encode(LM_SANS_REGULAR.read_bytes()).decode()
+        if LM_SANS_REGULAR.exists()
+        else ""
+    )
+    lm_bold_b64 = (
+        base64.b64encode(LM_SANS_BOLD.read_bytes()).decode()
+        if LM_SANS_BOLD.exists()
+        else ""
+    )
 
     def pill(ok: bool) -> str:
-        return f'<span class="pill {"good" if ok else "bad"}">{"C" if ok else "I"}</span>'
+        return (
+            f'<span class="pill {"good" if ok else "bad"}">{"C" if ok else "I"}</span>'
+        )
 
     speed_rows_html = "\n".join(
         f"""<tr>
-          <td><span class="mono">{r['method']}</span></td>
-          <td class="mono">{r['tokens_per_second']:.2f}</td>
-          <td class="mono">{r['mean_accept']:.3f}</td>
-          <td class="mono">{r['speedup']:.2f}x</td>
-          <td class="mono">{r['n_mismatches']}/100</td>
+          <td><span class="mono">{r["method"]}</span></td>
+          <td class="mono">{r["tokens_per_second"]:.2f}</td>
+          <td class="mono">{r["mean_accept"]:.3f}</td>
+          <td class="mono">{r["speedup"]:.2f}x</td>
+          <td class="mono">{r["n_mismatches"]}/100</td>
         </tr>"""
         for r in native_speed_rows
     )
@@ -246,19 +298,19 @@ def main() -> None:
     mismatch_table_rows = "\n".join(
         f"""<tr>
           <td class="mono">{qid}</td>
-          <td>{'✓' if qid in native["baseline_rerun"] and qid not in native_determinism_mismatches else ''}</td>
-          {''.join(f'<td class="{"mono match-bad" if qid in r["mismatch_qids"] else "mono"}">{"✗" if qid in r["mismatch_qids"] else "✓"}</td>' for r in native_speed_rows if r['method'] != 'baseline')}
+          <td>{"✓" if qid in native["baseline_rerun"] and qid not in native_determinism_mismatches else ""}</td>
+          {"".join(f'<td class="{"mono match-bad" if qid in r["mismatch_qids"] else "mono"}">{"✗" if qid in r["mismatch_qids"] else "✓"}</td>' for r in native_speed_rows if r["method"] != "baseline")}
         </tr>"""
         for qid in sorted(set().union(*(r["mismatch_qids"] for r in native_speed_rows)))
     )
 
     examples_html = "\n".join(
         f"""<div class="bug">
-          <div class="bug-title"><span class="n">question_id {ex['qid']}</span></div>
+          <div class="bug-title"><span class="n">question_id {ex["qid"]}</span></div>
           <p><strong>baseline (true greedy):</strong></p>
-          <code>{esc(truncate(ex['base_output'], 400))}</code>
+          <code>{esc(truncate(ex["base_output"], 400))}</code>
           <p style="margin-top:10px"><strong>toolspec:</strong></p>
-          <code>{esc(truncate(ex['spec_output'], 400))}</code>
+          <code>{esc(truncate(ex["spec_output"], 400))}</code>
         </div>"""
         for ex in examples
     )
@@ -368,11 +420,11 @@ footer a {{ color: var(--text-dim); }}
     完整叙述见 <code style="display:inline;padding:1px 5px">docs/toolspec_integration_findings.md</code>。
   </p>
   <div class="cards">
-    <div class="card"><div class="label">原生仓库 toolspec 加速比</div><div class="num">{native_toolspec_row['speedup']:.2f}x</div><div class="foot">{native_baseline_row['tokens_per_second']:.1f} → {native_toolspec_row['tokens_per_second']:.1f} tokens/s</div></div>
-    <div class="card"><div class="label">适配器 toolspec 加速比</div><div class="num">{adapter_toolspec['tokens_per_second']/adapter_baseline['tokens_per_second']:.2f}x</div><div class="foot">{adapter_baseline['tokens_per_second']:.1f} → {adapter_toolspec['tokens_per_second']:.1f} tokens/s</div></div>
-    <div class="card"><div class="label">正确性（vs 真实 greedy baseline）</div><div class="num">{100 - native_toolspec_row['n_mismatches']}/100</div><div class="foot">原生仓库，{native_toolspec_row['n_mismatches']} 条偏离</div></div>
-    <div class="card"><div class="label">适配器逐 token 复现原生行为</div><div class="num">{'完全一致' if same_mismatch_set else '不一致'}</div><div class="foot">{len(adapter_toolspec['incorrect_qids'])} 条偏离，跟原生仓库{'相同' if same_mismatch_set else '不同'}的 question_id</div></div>
-    <div class="card"><div class="label">inspect_trace Hooks 触发</div><div class="num">{adapter_baseline['n_trace_files'] + adapter_toolspec['n_trace_files']}</div><div class="foot">真实 per-sample trace 文件数（两个 run 合计）</div></div>
+    <div class="card"><div class="label">原生仓库 toolspec 加速比</div><div class="num">{native_toolspec_row["speedup"]:.2f}x</div><div class="foot">{native_baseline_row["tokens_per_second"]:.1f} → {native_toolspec_row["tokens_per_second"]:.1f} tokens/s</div></div>
+    <div class="card"><div class="label">适配器 toolspec 加速比</div><div class="num">{adapter_toolspec["tokens_per_second"] / adapter_baseline["tokens_per_second"]:.2f}x</div><div class="foot">{adapter_baseline["tokens_per_second"]:.1f} → {adapter_toolspec["tokens_per_second"]:.1f} tokens/s</div></div>
+    <div class="card"><div class="label">正确性（vs 真实 greedy baseline）</div><div class="num">{100 - native_toolspec_row["n_mismatches"]}/100</div><div class="foot">原生仓库，{native_toolspec_row["n_mismatches"]} 条偏离</div></div>
+    <div class="card"><div class="label">适配器逐 token 复现原生行为</div><div class="num">{"完全一致" if same_mismatch_set else "不一致"}</div><div class="foot">{len(adapter_toolspec["incorrect_qids"])} 条偏离，跟原生仓库{"相同" if same_mismatch_set else "不同"}的 question_id</div></div>
+    <div class="card"><div class="label">inspect_trace Hooks 触发</div><div class="num">{adapter_baseline["n_trace_files"] + adapter_toolspec["n_trace_files"]}</div><div class="foot">真实 per-sample trace 文件数（两个 run 合计）</div></div>
     <div class="card"><div class="label">fp16 决定性对照</div><div class="num">{len(native_determinism_mismatches)}/100</div><div class="foot">baseline 重跑两次的差异数（噪声下限）</div></div>
   </div>
 </section>
@@ -387,7 +439,7 @@ footer a {{ color: var(--text-dim); }}
 </section>
 
 <section class="panel" id="correctness">
-  <div class="panel-head">正确性调查：ToolSpec 号称 training-free/无损，但实测有 {native_toolspec_row['n_mismatches']}/100 偏离</div>
+  <div class="panel-head">正确性调查：ToolSpec 号称 training-free/无损，但实测有 {native_toolspec_row["n_mismatches"]}/100 偏离</div>
   <p class="panel-desc">
     先排除"这是 fp16/硬件本身不确定"：把 baseline 重新跑一遍（同一段代码、同一个模型），
     跟第一次比对，<strong>{len(native_determinism_mismatches)}/100</strong> 不一致——纯 autoregressive greedy decoding 在这台机器上是完全确定的，不是噪声。
@@ -396,7 +448,7 @@ footer a {{ color: var(--text-dim); }}
     表格逐个 question_id 列出四个方法各自是否偏离（✗ = 偏离）：
   </p>
   <table>
-    <thead><tr><th>question_id</th><th>baseline 自身可重复</th>{''.join(f'<th>{r["method"]}</th>' for r in native_speed_rows if r['method'] != 'baseline')}</tr></thead>
+    <thead><tr><th>question_id</th><th>baseline 自身可重复</th>{"".join(f"<th>{r['method']}</th>" for r in native_speed_rows if r["method"] != "baseline")}</tr></thead>
     <tbody>{mismatch_table_rows}</tbody>
   </table>
 </section>
@@ -409,23 +461,23 @@ footer a {{ color: var(--text-dim); }}
     <tbody>
       <tr>
         <td>原生仓库</td>
-        <td class="mono">{native_baseline_row['tokens_per_second']:.2f}</td>
-        <td class="mono">{native_toolspec_row['tokens_per_second']:.2f}</td>
-        <td class="mono">{native_toolspec_row['speedup']:.2f}x</td>
-        <td class="mono">{native_toolspec_row['n_mismatches']}/100</td>
+        <td class="mono">{native_baseline_row["tokens_per_second"]:.2f}</td>
+        <td class="mono">{native_toolspec_row["tokens_per_second"]:.2f}</td>
+        <td class="mono">{native_toolspec_row["speedup"]:.2f}x</td>
+        <td class="mono">{native_toolspec_row["n_mismatches"]}/100</td>
         <td>—</td>
       </tr>
       <tr>
         <td>inspect_ai 适配器</td>
-        <td class="mono">{adapter_baseline['tokens_per_second']:.2f}</td>
-        <td class="mono">{adapter_toolspec['tokens_per_second']:.2f}</td>
-        <td class="mono">{adapter_toolspec['tokens_per_second']/adapter_baseline['tokens_per_second']:.2f}x</td>
-        <td class="mono">{len(adapter_toolspec['incorrect_qids'])}/100</td>
-        <td>{pill(same_mismatch_set)} {'完全相同的 question_id' if same_mismatch_set else '不同！'}</td>
+        <td class="mono">{adapter_baseline["tokens_per_second"]:.2f}</td>
+        <td class="mono">{adapter_toolspec["tokens_per_second"]:.2f}</td>
+        <td class="mono">{adapter_toolspec["tokens_per_second"] / adapter_baseline["tokens_per_second"]:.2f}x</td>
+        <td class="mono">{len(adapter_toolspec["incorrect_qids"])}/100</td>
+        <td>{pill(same_mismatch_set)} {"完全相同的 question_id" if same_mismatch_set else "不同！"}</td>
       </tr>
     </tbody>
   </table>
-  <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">{adapter_baseline['eval_file']}</code>、<code style="display:inline;padding:1px 5px">{adapter_toolspec['eval_file']}</code></p>
+  <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">{adapter_baseline["eval_file"]}</code>、<code style="display:inline;padding:1px 5px">{adapter_toolspec["eval_file"]}</code></p>
 </section>
 
 <section class="panel" id="vllm">
@@ -438,24 +490,24 @@ footer a {{ color: var(--text-dim); }}
     <tbody>
       <tr>
         <td>vLLM + ngram 投机解码</td>
-        <td class="mono">{vllm_baseline['tokens_per_second']:.2f}</td>
-        <td class="mono">{vllm_ngram['tokens_per_second']:.2f}</td>
+        <td class="mono">{vllm_baseline["tokens_per_second"]:.2f}</td>
+        <td class="mono">{vllm_ngram["tokens_per_second"]:.2f}</td>
         <td class="mono">{vllm_speedup:.2f}x</td>
         <td class="mono">{len(vllm_ngram_mismatch_qids)}/100</td>
       </tr>
       <tr>
         <td>ToolSpec（适配器，同一个 harness）</td>
-        <td class="mono">{adapter_baseline['tokens_per_second']:.2f}</td>
-        <td class="mono">{adapter_toolspec['tokens_per_second']:.2f}</td>
-        <td class="mono">{adapter_toolspec['tokens_per_second']/adapter_baseline['tokens_per_second']:.2f}x</td>
-        <td class="mono">{len(adapter_toolspec['incorrect_qids'])}/100</td>
+        <td class="mono">{adapter_baseline["tokens_per_second"]:.2f}</td>
+        <td class="mono">{adapter_toolspec["tokens_per_second"]:.2f}</td>
+        <td class="mono">{adapter_toolspec["tokens_per_second"] / adapter_baseline["tokens_per_second"]:.2f}x</td>
+        <td class="mono">{len(adapter_toolspec["incorrect_qids"])}/100</td>
       </tr>
     </tbody>
   </table>
   <p class="panel-desc" style="margin-top:14px;margin-bottom:0">
     在这个任务（API-Bank tool-calling 预测）上，ToolSpec 的领域特定方法比 vLLM 通用 ngram 投机解码<strong>更快</strong>（speedup 高约 60%）、<strong>偏离率也更低</strong>（11% vs 23%）——通用方法不知道输出要符合 tool-call JSON schema，领域特定方法知道。
   </p>
-  <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">{vllm_baseline['eval_file']}</code>、<code style="display:inline;padding:1px 5px">{vllm_ngram['eval_file']}</code></p>
+  <p class="file-ref">.eval 日志：<code style="display:inline;padding:1px 5px">{vllm_baseline["eval_file"]}</code>、<code style="display:inline;padding:1px 5px">{vllm_ngram["eval_file"]}</code></p>
 </section>
 
 <section class="panel" id="examples">

@@ -32,8 +32,10 @@
 | 17b | [`toolspec_integration_findings.md`](./toolspec_integration_findings.md) | ToolSpec 原生复现（五种方法真实速度对比，发现"并非严格 lossless"的真实特性）+ 迁移进 harness（自定义 `ModelAPI` provider，因为它是原始 HF transformers 生成循环不是 HTTP 服务）+ 二次复现，逐 token 精确对齐原生仓库输出 | 读完 17，想看具体接入案例时看 |
 | 17c | [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md) | ToolSpec vs vLLM 自带 ngram 投机解码的真实对比：ToolSpec 领域特定方法比通用方法快约 60%、偏离率更低；顺带发现一个 `inspect_trace` 的 `vllm_metrics` 采集器在某些场景下完全不产出记录的真实 bug，跟 `goal2_real_validation_findings.md` 的既有结论有未解决的冲突 | 读完 17b，想知道跟 vLLM 自带能力比怎么样时看 |
 | 17d | [`nscc_h100_speculative_decoding_plan.md`](./nscc_h100_speculative_decoding_plan.md) | NSCC H100 节点投机解码策略：为什么本地开发机的 vLLM 版本约束在那边不成立、为什么升级能用上 EAGLE-3（真实发布数据 3.0-3.4x）、为什么要换模型才有现成草稿 checkpoint——**设计阶段产出，`nscc_model_server/` 还没在真实硬件上跑通**，如实标注 | 要在 NSCC 上做投机解码实验时看，注意"待现场验证"清单 |
+| 18 | [`next_phase_requirements.md`](./next_phase_requirements.md) | 下一阶段需求文档：优先完成 vLLM 逐请求观测和标准化干预接口，用小规模受控并发做稳健性验证，再推进 Replay 和案例研究，最后完成可复现与面试交付收口 | 读完 11-17d，准备开始下一轮实现时读 |
+| 19 | [`serving_observability_b_howto.md`](./serving_observability_b_howto.md) | 需求 B（Serving 观测闭环）配套脚本怎么跑、每条 B 类验收标准怎么核对；含一个新发现的真实约束（inspect_ai 默认只保留每个模型前 5 次调用的原始响应，超过就拿不到逐请求指标）和字段名待现场验证清单 | 读完 18，要实际跑需求 B 的脚本时看 |
 
-读完这 22 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
+读完这份清单，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
 ## 按用途查找
 
@@ -48,6 +50,8 @@
 - **想接入一个新的外部 benchmark 框架** → 14（benchmark_integration_playbook）
 - **要往 NSCC 计算节点部署/跑实验、或者两人协作有疑问** → 15（remote_compute_workflow）+ 16（team_collaboration）
 - **看到一篇 agent 加速相关论文，想知道跟我们有没有关系** → 17（acceleration_methods_survey）
+- **准备下一轮开发，想知道必须做什么、做到什么才算完成** → 18（next_phase_requirements）
+- **要实际跑需求 B 的脚本、核对验收标准** → 19（serving_observability_b_howto）
 
 ## 我们写的代码/脚本在哪（不在这个文件夹里，列出来方便对照）
 
@@ -74,6 +78,7 @@
 - [ ] **踩坑合集（Troubleshooting）**——目前真实踩过的坑（`anyio.get_current_task()` 不稳定、`pyairports` 空壳包、CUDA 驱动版本不匹配、nvidia wheel 缓存损坏）分散在 `goal1_real_benchmark_findings.md` 和 `local_model_deployment.md` 里。现在坑还不算多，值得等自然积累到一定量、且分散在各篇里确实开始难查的时候再抽取，不急。
 - [ ] **目标三（标准化加速干预接口）实现**——`inspect_ai_roadmap.md` 判断可行性高、工作量相对最小，是目标二完成之后下一个建议推进的目标，还没开始。
 - [ ] **目标五（加速方法 insight/method 分析）**——[`acceleration_methods_survey.md`](./acceleration_methods_survey.md)，2026-08-05 新增目标，目前完成了 SPORK、ToolSpec 两篇的完整分析，候选清单里还有 9 篇没细读，按文档里的优先级建议逐步推进。
+- [x] **下一阶段需求收敛**——[`next_phase_requirements.md`](./next_phase_requirements.md)，按“逐请求观测（受控并发仅做稳健性验证）→ 干预接口 → Replay → 案例研究 → 可复现与面试交付收口”的顺序写成 M0-M5 验收需求。
 
 ## inspect_ai 官方文档精选
 

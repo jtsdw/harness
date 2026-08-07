@@ -202,6 +202,22 @@ def summarize_episode_layer(trace_dir: Path) -> list[EpisodeLayerSummary]:
     return out
 
 
+_P99_MIN_SAMPLES = 100
+"""需求 B 类验收标准: "样本不足时不报告 P99" -- P99 is only meaningful with roughly this many
+points (fewer than this and the 99th-percentile point is extrapolated past the actual data)."""
+
+
+def _percentile(sorted_values: list[float], p: float) -> float:
+    """Linear-interpolated percentile (matches numpy's default `interpolation="linear"`)."""
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = p / 100 * (len(sorted_values) - 1)
+    lower = int(rank)
+    upper = min(lower + 1, len(sorted_values) - 1)
+    frac = rank - lower
+    return sorted_values[lower] + (sorted_values[upper] - sorted_values[lower]) * frac
+
+
 def _has_real_overlap(intervals: list[tuple[float, float]]) -> bool:
     for i, (a_start, a_end) in enumerate(intervals):
         for b_start, b_end in intervals[i + 1 :]:
@@ -217,6 +233,12 @@ class EpisodeLayerRunSummary:
     total_cost_usd: float | None
     cost_per_successful_episode_usd: float | None
     mean_end_to_end_latency_seconds: float | None
+    p50_end_to_end_latency_seconds: float | None
+    p95_end_to_end_latency_seconds: float | None
+    p99_end_to_end_latency_seconds: float | None
+    """`None` whenever there are fewer than `_P99_MIN_SAMPLES` latency samples -- reporting a P99
+    off a handful of points would just be relabeling the max, per B 类验收标准's "样本不足时不报告
+    P99"."""
     mean_n_llm_calls: float
     mean_n_tool_calls: float
     total_retries: int
@@ -240,6 +262,7 @@ def summarize_run(trace_dir: Path) -> EpisodeLayerRunSummary:
     cost_per_success = (
         (total_cost / len(successes)) if total_cost is not None and successes else None
     )
+    sorted_latencies = sorted(latencies)
 
     return EpisodeLayerRunSummary(
         n_episodes=n,
@@ -249,6 +272,17 @@ def summarize_run(trace_dir: Path) -> EpisodeLayerRunSummary:
         mean_end_to_end_latency_seconds=(sum(latencies) / len(latencies))
         if latencies
         else None,
+        p50_end_to_end_latency_seconds=(
+            _percentile(sorted_latencies, 50) if sorted_latencies else None
+        ),
+        p95_end_to_end_latency_seconds=(
+            _percentile(sorted_latencies, 95) if sorted_latencies else None
+        ),
+        p99_end_to_end_latency_seconds=(
+            _percentile(sorted_latencies, 99)
+            if len(sorted_latencies) >= _P99_MIN_SAMPLES
+            else None
+        ),
         mean_n_llm_calls=(sum(e.n_llm_calls for e in per_episode) / n) if n else 0.0,
         mean_n_tool_calls=(sum(e.n_tool_calls for e in per_episode) / n) if n else 0.0,
         total_retries=sum(e.n_retries for e in per_episode),

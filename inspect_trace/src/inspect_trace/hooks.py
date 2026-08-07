@@ -35,8 +35,10 @@ from .schema import (
     SegmentTokenRecord,
     TokenAttributionRecord,
     VLLMMetricsRecord,
+    VLLMPerRequestMetricsRecord,
 )
 from .vllm_metrics import VLLMMetricsTracker
+from .vllm_per_request_metrics import extract_per_request_metrics
 from .writer import TraceWriter
 
 
@@ -142,6 +144,20 @@ class TraceHooks(Hooks):
                     **envelope, model_event_uuid=event.uuid, **vllm_payload
                 )
                 self._writer.write(run_id, data.eval_id, sample_uuid, vllm_record)
+
+            # Same "is this actually vLLM" gate as VLLMMetricsRecord above uses (there, a
+            # reachable /metrics endpoint; here, no network probe available since this is a pure
+            # read of the event's own response, so the model name is the only signal) -- avoids
+            # writing a "vllm_*" record kind for hosted-provider calls where it's structurally
+            # never going to have anything but nulls in it.
+            if "vllm" in event.model.lower():
+                per_request_payload = extract_per_request_metrics(event)
+                per_request_record = VLLMPerRequestMetricsRecord(
+                    **envelope, model_event_uuid=event.uuid, **per_request_payload
+                )
+                self._writer.write(
+                    run_id, data.eval_id, sample_uuid, per_request_record
+                )
 
         elif isinstance(event, ToolEvent):
             envelope = self._context.envelope_fields(sample_uuid, eval_id=data.eval_id)
