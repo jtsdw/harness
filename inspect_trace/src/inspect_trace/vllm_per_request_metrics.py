@@ -36,18 +36,19 @@ speculative draft/accepted tokens or guided-decoding overhead in this class; tho
 below are kept as a long shot (maybe a different serving path or a version this project hasn't
 seen exposes them), not because they were found anywhere.
 
-**This is still not the same as verified against a real response.** vLLM's `main` branch today is
-not necessarily the same version `nscc_model_server`'s `vllm>=0.9.0` floor resolves to on the
-actual NSCC node -- the V1 metrics/engine rewrite this is all pulled from has been a fast-moving
-target across recent vLLM releases, so the exact version installed there could predate or postdate
-some of this. Confirmed-from-source is a real step up from "guessed, no source at all" (which is
-what this module shipped with originally), but `nscc_model_server/scripts/
-inspect_per_request_metrics.sh` still needs to run against the real server before this is fully
-trusted -- see that script's usage note: the `return_metrics` request flag it tries no longer looks
-right either, since `PerRequestTimingMetrics` doesn't appear to be behind any request-side opt-in
-in the current source (populated automatically, `None` when unavailable) -- kept in the script
-anyway since a real server ignoring an unrecognized field costs nothing and confirms the "no opt-in
-needed" reading either way.
+**2026-08-08 update: partially confirmed against a real NSCC response.** `inspect_per_request_metrics.sh`
+ran against a real server (`vllm-0.26.0-8cfe525c`) and got back a response with a top-level
+`"metrics"` key -- the container name is real, not a guess. But its value was `null`, not the
+object this module expected. Read the real serving code
+(`vllm/entrypoints/openai/chat_completion/serving.py`) to find out why: `metrics` is only
+populated when the server was started with `--enable-per-request-metrics` (a CLI flag,
+`enable_per_request_metrics: bool = False` by default) -- it is **not** request-side opt-in the
+way the earlier guess in this docstring assumed, and the `return_metrics` request field
+`inspect_per_request_metrics.sh` tried really doesn't do anything (confirmed empirically now, not
+just suspected). `nscc_model_server/scripts/serve.sh` now passes `--enable-per-request-metrics`.
+The actual field names inside `PerRequestTimingMetrics` (`time_to_first_token_ms` etc.) are still
+unconfirmed against a real populated response -- that needs one more real run with the flag now
+being passed, and `inspect_per_request_metrics.sh` should be run again to get that.
 
 `usage.prompt_tokens`, `usage.completion_tokens`, `usage.prompt_tokens_details.cached_tokens`, and
 `choices[0].finish_reason` are unaffected by any of this -- standard OpenAI chat-completion schema,

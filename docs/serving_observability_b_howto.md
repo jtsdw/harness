@@ -14,20 +14,26 @@ vLLM，见 `../nscc_model_server/`），不是给这台本地开发机（老 vLL
 `run_bfcl_benchmark.sh`，必须自己设这个环境变量，否则 B1/B2 的逐请求指标只有前 5 次调用有数据，其余全部
 是 `confidence=unattributed`，看起来像是"vLLM 版本不支持"，实际上是这个截断在起作用**。
 
-vLLM 逐请求 metrics 响应里具体字段叫什么名字，官方文档页（docs.vllm.ai）这次抓取一直被限流（429），但
-2026-08-07 换成直接读 vLLM 在 GitHub 上的真实源码（`main` 分支）拿到了确切答案：`ChatCompletionResponse`
-自带一个 `metrics: PerRequestTimingMetrics | None` 字段，不需要任何请求参数开启（自动填充，没有就是
-`None`），真实字段名是 `time_to_first_token_ms`/`queue_time_ms`/`generation_time_ms`/`mean_itl_ms`/
-`tokens_per_second`（**都是毫秒**，之前代码假设的是秒，已经改成自动 ÷1000 换算）；这个类里**没有**
-`prefill_time`、也没有投机解码/guided decoding 相关字段。同样的办法确认了 Prometheus `/metrics` 那边
+vLLM 逐请求 metrics 响应里具体字段叫什么名字，官方文档页（docs.vllm.ai）这次抓取一直被限流（429），
+2026-08-07 换成直接读 vLLM 在 GitHub 上的真实源码（`main` 分支）拿到了字段名：`ChatCompletionResponse`
+自带一个 `metrics: PerRequestTimingMetrics | None` 字段，真实字段名是
+`time_to_first_token_ms`/`queue_time_ms`/`generation_time_ms`/`mean_itl_ms`/`tokens_per_second`（**都是
+毫秒**，之前代码假设的是秒，已经改成自动 ÷1000 换算）；这个类里**没有** `prefill_time`、也没有投机解码/
+guided decoding 相关字段。同样的办法确认了 Prometheus `/metrics` 那边
 `vllm:prefix_cache_queries`/`vllm:prefix_cache_hits`（不是猜的 `gpu_prefix_cache_*_total`）、
 `vllm:num_preemptions`（不带 `_total`）、`vllm:kv_cache_usage_perc`（不带 `gpu_` 前缀）、
 `vllm:iteration_tokens_total` 这几个真实名字，都已经改成候选表里优先尝试的名字，旧的猜测降级成兜底候选。
 
-**这仍然不等于验证过**：读到的是 vLLM `main` 分支*今天*的代码，不一定是 `nscc_model_server` 那边
-`vllm>=0.9.0` 这个下限实际会解析出的具体版本——V1 metrics 这块这几个版本一直在变。"有源码依据、没在
-NSCC 上确认过" 和 "凭感觉猜的、什么依据都没有" 是两个不同的可信度级别，下面的表格分开标注；真正的确认还是
-要靠 `inspect_per_request_metrics.sh` 在真实服务器上跑一次。
+**当时猜错的一点，2026-08-08 用真实 NSCC 服务器（`vllm-0.26.0-8cfe525c`）纠正了**：原来以为 `metrics`
+"不需要任何请求参数开启，自动填充"——实际打了真请求发现响应里 `"metrics"` 字段确实存在，但值是 `null`；
+往下查 vLLM 真实 serving 代码（`vllm/entrypoints/openai/chat_completion/serving.py`）才发现，这是一个
+**服务端启动参数** `--enable-per-request-metrics` 控制的，不开就永远是 `null`，跟请求本身无关。之前
+`inspect_per_request_metrics.sh` 里猜的请求级 `return_metrics` 参数已经被真实验证证明什么都不做，脚本
+里那部分已经删掉了。`serve.sh` 现在默认带上这个参数了。
+
+**这仍然不完全等于验证过**：容器 key（`metrics`）和触发机制（服务端 flag）是真实确认的了，但字段名本身
+（`time_to_first_token_ms` 等）还是 vLLM `main` 分支源码里读到的，还没有在"确实被 `--enable-per-request-metrics`
+填充"的真实响应里逐个核对过——这是下一步，"现场验证进度"一节有完整记录。
 
 ## 需求条款 ↔ 实现对应表（B1-B5 逐条，如实标状态）
 
@@ -41,8 +47,8 @@ NSCC 上确认过" 和 "凭感觉猜的、什么依据都没有" 是两个不同
 
 | 条款 | 状态 | 说明 |
 |---|---|---|
-| queue time / TTFT / decode time / mean ITL / output tokens/s | ⚠️ 部分实现，字段名**有 vLLM 源码依据** | `vllm_per_request_metrics.py` 提取 `response["metrics"]` 里的 `queue_time_ms`/`time_to_first_token_ms`/`generation_time_ms`/`mean_itl_ms`/`tokens_per_second`——这几个名字是从 vLLM GitHub 源码（`PerRequestTimingMetrics` 类）读到的真实字段名，不是瞎猜，但没有在 NSCC 实际部署的版本上跑过确认；猜不中/版本不符就是 `None` + 记进 `raw_fields_missing` |
-| "是否启用、响应结构必须现场验证" | ⚠️ 部分验证 | 源码读到的结论是"不需要开启，自动填充"，比最初以为的"猜一个 opt-in 参数"更接近事实；`inspect_per_request_metrics.sh` 已经改成主要核对这一点，但还没在真实 NSCC 服务器上跑过 |
+| queue time / TTFT / decode time / mean ITL / output tokens/s | ⚠️ 部分实现，容器 key **已在真实响应里验证存在** | `vllm_per_request_metrics.py` 提取 `response["metrics"]` 里的 `queue_time_ms`/`time_to_first_token_ms`/`generation_time_ms`/`mean_itl_ms`/`tokens_per_second`。2026-08-08 用 `inspect_per_request_metrics.sh` 在真实 NSCC 服务器（`vllm-0.26.0-8cfe525c`）上打过请求，响应里确实有顶层 `"metrics"` 字段——容器 key 猜对了；但值是 `null`，往下查真实 serving 代码才发现要单独传 `--enable-per-request-metrics` 才会填（见下一行），`serve.sh` 现在已经加上了这个参数，但加上之后 `metrics` 里具体的字段名是不是长这样，还没有再跑一次确认过 |
+| "是否启用、响应结构必须现场验证" | ⚠️ 部分验证，机制已confirmed | 最初猜"不需要开启，自动填充"是错的——2026-08-08 读 `vllm/entrypoints/openai/chat_completion/serving.py` 真实代码确认：`metrics` 只有服务端启动时传了 `--enable-per-request-metrics`（`enable_per_request_metrics: bool = False`，CLI 参数，不是请求里的字段）才会填；之前 `inspect_per_request_metrics.sh` 猜的请求级 `return_metrics` 参数经真实服务器验证确实什么都不做，已经从脚本里删掉。`serve.sh` 现在默认带上这个 flag 了，但字段名本身还没在"确实填充了"的响应里验证过 |
 | Prometheus 服务级观测：running/waiting requests | ✅ 已实现 | `service_metrics_sampler.py`，字段名沿用 `vllm_metrics.py` 里已经在这台机器老版本 vLLM 上验证过的名字（`vllm:num_requests_running` 等，新版本 V1 metrics 源码确认这两个名字没变），但**没有在新版本上实测过** |
 | prefill/decode/queue **histogram**（分布，不只是均值） | ❌ 未实现 | `service_metrics_sampler.py` 目前只读 gauge/counter 类字段，没有解析这几个 histogram 本身（bucket 分布），只有 invocation 层单次值的 prefill/decode time（见 B4） |
 | preemption / KV Cache | ✅ 已实现，字段名**有源码依据** | `vllm:num_preemptions`（不带 `_total`，跟老版本的 `vllm:num_preemptions_total` 不一样）、`vllm:kv_cache_usage_perc`（不带 `gpu_` 前缀，是从老版本 `vllm:gpu_cache_usage_perc` 改名来的）——都是从 vLLM V1 metrics 源码读到的真实名字，候选表已更新为优先尝试这两个 |
@@ -310,13 +316,21 @@ VLLM_BASE_URL="http://localhost:8000/v1" ./scripts/run_b5_matrix.sh
 | 指标采集开销单独测量并报告 | `service_metrics.jsonl` 每行的 `poll_duration_seconds` 就是这次采集本身花的时间；**已知缺口**：`vllm_metrics.py`（老的 Prometheus 差值 collector）本身的两次 `/metrics` 请求耗时目前没有单独测量，`vllm_per_request_metrics.py` 是纯内存读取（不额外发请求），本身开销可忽略不计，但这一条还没有补上，如实标注在这里 |
 | vLLM 指标不可用时运行继续但显式记录缺失原因 | `vllm_per_request_metrics` 记录的 `raw_fields_missing` 列表、`service_metrics.jsonl` 的 `vllm_metrics_reachable`/`prefix_cache_hit_rate_source` 字段都是为这个设计的 |
 
-## 待现场验证清单（如实列出，这次没法验证）
+## 现场验证进度（2026-08-08 更新，第一次真实 NSCC 数据）
 
-- `vllm_per_request_metrics.py` 的字段候选名——2026-08-07 已经从"凭空猜"升级成"vLLM GitHub `main` 分支源码里的真实字段名"（`PerRequestTimingMetrics` 类），但 `main` 分支不等于 NSCC 上 `vllm>=0.9.0` 实际解析出的版本，跑第 1 步的探测脚本、把输出发回来才能真正确认。
-- `service_metrics_sampler.py` 里 prefix cache 命中率、batch/iteration token 的 Prometheus 字段名——同样已经换成源码确认的真实名字（`vllm:prefix_cache_queries`/`vllm:prefix_cache_hits`、`vllm:iteration_tokens_total`），版本差异的风险跟上一条一样存在。
-- `vllm_metrics.py`/`service_metrics_sampler.py` 里 running/waiting 用的字段名是在这台机器老版本 vLLM（`0.6.3.post1`）上验证过、且源码确认新版本没改名的；preemption/KV Cache 已经按源码改成新版本的真实名字（`vllm:num_preemptions`、`vllm:kv_cache_usage_perc`），同样没在新版本上实测过。
+NSCC 节点真实跑起来了（`a2ap-dgx037`），确认了几件事，如实记录：
+
+- **真实 vLLM 版本**：`vllm-0.26.0-8cfe525c`（响应的 `system_fingerprint` 字段里带的），比 `nscc_model_server` 锁的 `vllm>=0.9.0` 下限新得多。
+- **两个真实环境问题，都已经修复**：(1) 这个节点没有可发现的 CUDA toolkit（找不到 `nvcc`，`/usr/local/cuda` 不存在，只有驱动）——第一次导致 FlashInfer 融合采样 kernel 现场编译崩溃，已经用 `VLLM_USE_FLASHINFER_SAMPLER=0` 绕开；(2) `serve.sh` 自己的启动失败检测逻辑有 bug，把 vLLM 捕获住的良性 WARNING（里面恰好包含 "Traceback" 字样）误判成致命错误，已经修（只有不带 `WARNING` 前缀的才算真失败）。
+- **`response["metrics"]` 这个容器 key 真实存在**，但默认是 `null`——要传 `--enable-per-request-metrics`（服务端启动参数，不是请求参数）才会填，已经加进 `serve.sh`。字段名本身（`time_to_first_token_ms` 等）还没有在"确实填充"的响应里验证过，这是下一步。
+- **一个跟本文档主题相关但还没处理的真实约束**：默认参数（`GPU_MEMORY_UTILIZATION=0.9`、`MAX_MODEL_LEN=16384`）下，32B 模型权重 + EAGLE-3 草稿头占用 63.94 GiB，KV cache 只剩 4.71 GiB（18,976 tokens），日志里"Maximum concurrency for 16,384 tokens per request: 1.16x"——这对 B5 要测的 concurrency=4/8 是个真实瓶颈，大概率需要调低 `MAX_MODEL_LEN` 或调高 `GPU_MEMORY_UTILIZATION` 才跑得动，还没验证过调整后的效果。
+
+**还没验证/还没做的**（原样保留，没有因为上面这些进展就假装解决了）：
+
+- `vllm_per_request_metrics.py`/`service_metrics_sampler.py` 里除了容器 key 之外的具体字段名（`time_to_first_token_ms` 等、`vllm:prefix_cache_queries`/`vllm:num_preemptions`/`vllm:kv_cache_usage_perc`/`vllm:iteration_tokens_total`）——源码依据仍然只是 vLLM `main` 分支，跟这个节点实际的 `0.26.0` 是否完全一致没有逐个确认过；running/waiting 是唯一在老版本和新版本源码里都确认没变名的。
 - `nvidia-smi` 在 PBS 分配到的节点上是否可直接调用（多卡/MIG 切分场景下 `--query-gpu` 的行为未验证）。
-- concurrency=8/16 是否会像老硬件那样把服务器打崩——这正是 B5 要跑出来的答案，不是跑之前就该知道的。
+- concurrency=8/16 是否会把服务器打崩——这正是 B5 要跑出来的答案，不是跑之前就该知道的。
+- KV cache 余量不够高并发这件事，具体调整到什么参数才够用，还没试。
 
 上面这份是"猜了但没验证"的清单；另外还有几项是这次**压根没做**（不是猜错了，是没碰），已经在上面"需求条款 ↔
 实现对应表"里逐条标了 ❌：Prometheus 服务级的 prefill/decode/queue histogram、服务级 speculative

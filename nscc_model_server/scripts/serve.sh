@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 # Starts vLLM on the NSCC H100 node. See ../README.md -- this session still has no direct access
 # to that machine, so this remains largely a best-effort reading of vLLM's own docs/source rather
-# than a known-working recipe, but as of 2026-08-08 it has real feedback from someone who can run
-# it: model + EAGLE-3 draft load fine, but kernel warmup crashed on a missing CUDA toolkit (no
-# nvcc/CUDA_HOME on this node) -- worked around below via VLLM_USE_FLASHINFER_SAMPLER=0. Hasn't
-# gotten past that point yet. Run this, then ./scripts/verify_eagle3.sh, and report back what
-# actually happens.
+# than a known-working recipe, but as of 2026-08-08 the server has actually come up and served a
+# real request there (real vLLM version confirmed: vllm-0.26.0-8cfe525c) -- model + EAGLE-3 draft
+# load fine, VLLM_USE_FLASHINFER_SAMPLER=0 got kernel warmup past the missing-CUDA-toolkit crash
+# (no nvcc/CUDA_HOME on this node), and a real chat completion round-tripped successfully. That
+# same real response showed `--enable-per-request-metrics` (needed for B1) wasn't being passed --
+# now added below. Run this, then ./scripts/verify_eagle3.sh, and report back what actually
+# happens -- next unconfirmed thing is whether a request now actually gets a populated `metrics`
+# field with the field names `vllm_per_request_metrics.py` expects.
 #
 # Optional overrides:
 #   MODEL                     (default: Qwen/Qwen3-32B)
@@ -90,11 +93,16 @@ fi
 
 echo "Starting vLLM serving $MODEL on port $PORT (this downloads the model on first run -- a 32B"
 echo "model is a large download, expect it to take a while) ..."
+# --enable-per-request-metrics is needed for 需求 B1 -- confirmed 2026-08-08 that without it the
+# response's "metrics" key is present but always null (vllm/entrypoints/openai/chat_completion/
+# serving.py gates it on this exact server-side flag; NOT a request-side opt-in like first
+# assumed -- see vllm_per_request_metrics.py's module docstring for the full story).
 nohup uv run vllm serve "$MODEL" \
   --port "$PORT" \
   --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
   --max-model-len "$MAX_MODEL_LEN" \
   --tensor-parallel-size "$TENSOR_PARALLEL_SIZE" \
+  --enable-per-request-metrics \
   "${SPECULATIVE_FLAGS[@]}" \
   > logs/vllm_server.log 2>&1 &
 echo $! > logs/vllm_server.pid
