@@ -34,6 +34,7 @@
 | 17d | [`nscc_h100_speculative_decoding_plan.md`](./nscc_h100_speculative_decoding_plan.md) | NSCC H100 节点投机解码策略：为什么本地开发机的 vLLM 版本约束在那边不成立、为什么升级能用上 EAGLE-3（真实发布数据 3.0-3.4x）、为什么要换模型才有现成草稿 checkpoint——**设计阶段产出，`nscc_model_server/` 还没在真实硬件上跑通**，如实标注 | 要在 NSCC 上做投机解码实验时看，注意"待现场验证"清单 |
 | 18 | [`next_phase_requirements.md`](./next_phase_requirements.md) | 下一阶段需求文档：优先完成 vLLM 逐请求观测和标准化干预接口，用小规模受控并发做稳健性验证，再推进 Replay 和案例研究，最后完成可复现与面试交付收口 | 读完 11-17d，准备开始下一轮实现时读 |
 | 19 | [`serving_observability_b_howto.md`](./serving_observability_b_howto.md) | 需求 B（Serving 观测闭环）配套脚本怎么跑、每条 B 类验收标准怎么核对；含一个新发现的真实约束（inspect_ai 默认只保留每个模型前 5 次调用的原始响应，超过就拿不到逐请求指标）和字段名待现场验证清单 | 读完 18，要实际跑需求 B 的脚本时看 |
+| 20 | [`vllm_request_concepts.md`](./vllm_request_concepts.md) | vLLM 单次请求背景知识：为什么是 HTTP/URL 请求、为什么能持续运行并处理并发（continuous batching）、一次请求从进队列到返回的完整生命周期，配一个真实抓到的响应逐字段详解 | 想搞懂 TTFT/queue time/KV cache 这些指标具体对应请求的哪个阶段时看，跟 19 配合读 |
 
 读完这份清单，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
@@ -52,6 +53,7 @@
 - **看到一篇 agent 加速相关论文，想知道跟我们有没有关系** → 17（acceleration_methods_survey）
 - **准备下一轮开发，想知道必须做什么、做到什么才算完成** → 18（next_phase_requirements）
 - **要实际跑需求 B 的脚本、核对验收标准** → 19（serving_observability_b_howto）
+- **搞不清楚 vLLM 请求/响应里某个字段是什么意思、为什么服务能一直跑着处理并发** → 20（vllm_request_concepts）
 
 ## 我们写的代码/脚本在哪（不在这个文件夹里，列出来方便对照）
 
