@@ -35,6 +35,8 @@
 | 18 | [`next_phase_requirements.md`](./next_phase_requirements.md) | 下一阶段需求文档：优先完成 vLLM 逐请求观测和标准化干预接口，用小规模受控并发做稳健性验证，再推进 Replay 和案例研究，最后完成可复现与面试交付收口 | 读完 11-17d，准备开始下一轮实现时读 |
 | 19 | [`serving_observability_b_howto.md`](./serving_observability_b_howto.md) | 需求 B（Serving 观测闭环）配套脚本怎么跑、每条 B 类验收标准怎么核对；含一个新发现的真实约束（inspect_ai 默认只保留每个模型前 5 次调用的原始响应，超过就拿不到逐请求指标）和字段名待现场验证清单 | 读完 18，要实际跑需求 B 的脚本时看 |
 | 20 | [`vllm_request_concepts.md`](./vllm_request_concepts.md) | vLLM 单次请求背景知识：为什么是 HTTP/URL 请求、为什么能持续运行并处理并发（continuous batching）、一次请求从进队列到返回的完整生命周期，配一个真实抓到的响应逐字段详解 | 想搞懂 TTFT/queue time/KV cache 这些指标具体对应请求的哪个阶段时看，跟 19 配合读 |
+| 21 | [`system_layers_and_acceleration.md`](./system_layers_and_acceleration.md) | Agent + vLLM 系统五层分层（Harness / 部署编排 / vLLM 引擎 / 执行运行时 / Model）：每层负责什么、对应项目里哪部分代码、现有加速方法都在哪层——含一张"层 × 项目现状"总结表 | 想清楚"我们现在在优化哪一层、还有哪些层没碰"时看，跟 19、20 配合读 |
+| 22 | [`b5_matrix_first_real_run_findings.md`](./b5_matrix_first_real_run_findings.md) | B5 矩阵第一次真实 NSCC 数据分析：新逐请求指标高并发下 100% exact（老方法掉到 2.5%）、KV cache 在 concurrency≥4 打满、`MAX_MODEL_LEN=16384` 导致 25% 的 cell 被真实打断且脚本没检测出来——含具体数字和后续要修的问题 | 需求 B 有真实数据了，想看这批数据说明了什么时看 |
 
 读完这份清单，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
@@ -54,6 +56,8 @@
 - **准备下一轮开发，想知道必须做什么、做到什么才算完成** → 18（next_phase_requirements）
 - **要实际跑需求 B 的脚本、核对验收标准** → 19（serving_observability_b_howto）
 - **搞不清楚 vLLM 请求/响应里某个字段是什么意思、为什么服务能一直跑着处理并发** → 20（vllm_request_concepts）
+- **想知道现在的加速工作在整个系统的哪一层、还有哪些层没碰** → 21（system_layers_and_acceleration）
+- **想看 B5 矩阵第一批真实数据说明了什么** → 22（b5_matrix_first_real_run_findings）
 
 ## 我们写的代码/脚本在哪（不在这个文件夹里，列出来方便对照）
 

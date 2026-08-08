@@ -9,9 +9,12 @@
 # preview/pull/delete pattern) -- see docs/remote_compute_workflow.md for the full picture of
 # how code (git) and data (this script) flow between the two nodes.
 #
-# Each person on the team keeps their OWN checkout under scratch/ (see docs/team_collaboration.md
-# for why) -- REMOTE_SUBDIR defaults to your local username so this points at your own checkout
-# by default; override it if your remote directory is named differently.
+# 2026-08-08 real finding: the default used to assume each team member keeps a separate checkout
+# under scratch/ (harness-$(whoami), per docs/team_collaboration.md's stated convention), but the
+# actual real checkout on the NSCC node right now is a single shared one at plain
+# scratch/harness/ (no per-user suffix) -- confirmed against a real terminal prompt
+# (`~/scratch/harness/nscc_model_server/scripts$`). Defaulting to that; override
+# NSCC_REMOTE_SUBDIR if/when the team actually moves to separate per-person checkouts.
 #
 # Usage:
 #   ./scripts/pull_runs.sh preview   # dry run, see what would transfer
@@ -21,7 +24,7 @@
 set -euo pipefail
 
 REMOTE_HOST="${NSCC_SSH_ALIAS:-nscc}"
-REMOTE_SUBDIR="${NSCC_REMOTE_SUBDIR:-harness-$(whoami)}"
+REMOTE_SUBDIR="${NSCC_REMOTE_SUBDIR:-harness}"
 REMOTE_DIR="/home/users/ntu/n2505716/scratch/${REMOTE_SUBDIR}/runs/"
 LOCAL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/nscc_runs/"
 
@@ -36,9 +39,9 @@ Usage:
 
 Env vars:
   NSCC_SSH_ALIAS     SSH alias/host for the compute node (default: nscc, see ~/.ssh/config)
-  NSCC_REMOTE_SUBDIR Your own checkout's subdirectory name under scratch/
-                      (default: harness-$(whoami) -- each team member keeps a separate
-                      checkout, see docs/team_collaboration.md)
+  NSCC_REMOTE_SUBDIR Checkout subdirectory name under scratch/ (default: harness -- the actual
+                      shared checkout confirmed on the real node 2026-08-08; override if your
+                      setup uses a different/per-person subdirectory)
 EOF
 }
 
