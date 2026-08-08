@@ -128,8 +128,18 @@ echo $! > logs/vllm_server.pid
 echo "pid $(cat logs/vllm_server.pid), logs at logs/vllm_server.log"
 
 echo "Waiting for startup (or failure)..."
+# 2026-08-08 real finding on nscc_model_server's identical detection logic (this script was the
+# original it was copied from): a bare "Traceback|OSError|RuntimeError" grep is too loose -- an
+# optional-dependency import failure that vLLM catches and logs as a WARNING can still contain the
+# literal string "Traceback" (Python's own formatting for a caught exception), which used to make
+# this loop exit early and report "failed to start" while the server was still normally starting
+# up. Real fatal errors aren't wrapped in a "WARNING ...:" prefix the way a caught, non-fatal one
+# is -- excluding lines that contain "WARNING" is what actually distinguishes them. Hasn't been
+# observed to false-positive on this dev machine's old vLLM pin, but it's the same bug, fixed the
+# same way for consistency and because there's no guarantee it stays silent forever here either.
 if timeout 280 bash -c '
-  until grep -qE "Uvicorn running|Application startup complete|Traceback|OSError|RuntimeError" "'"$PWD"'/logs/vllm_server.log" 2>/dev/null; do
+  until grep -qE "Uvicorn running|Application startup complete" "'"$PWD"'/logs/vllm_server.log" 2>/dev/null \
+     || grep -E "Traceback|OSError|RuntimeError" "'"$PWD"'/logs/vllm_server.log" 2>/dev/null | grep -qv "WARNING"; do
     sleep 8
   done
 '; then

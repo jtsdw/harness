@@ -82,8 +82,18 @@ echo "pid $(cat logs/vllm_server.pid), logs at logs/vllm_server.log"
 
 echo "Waiting for startup (or failure) -- a 32B model load + EAGLE-3 draft load can take longer"
 echo "than local-model-server's 3B-model timeout, this waits up to 10 minutes ..."
+# 2026-08-08 real finding: a bare "Traceback|OSError|RuntimeError" grep is too loose -- vLLM's own
+# optional-dependency import failures (e.g. deep_gemm's _find_cuda_home() AssertionError when
+# CUDA_HOME isn't set, seen for real on the NSCC node) get caught and logged as a WARNING that
+# still contains the literal string "Traceback" (Python's own formatting for a caught exception).
+# That single line used to satisfy this grep and made the script report "failed to start" while
+# the server was still normally starting up (and the nohup'd process kept running in the
+# background, unaffected -- this script just gave up watching it and printed a false alarm).
+# Real fatal errors from vLLM/uvicorn are not wrapped in a "WARNING ...:" prefix the way a caught,
+# non-fatal one is -- excluding lines that contain "WARNING" is what actually distinguishes them.
 if timeout 600 bash -c '
-  until grep -qE "Uvicorn running|Application startup complete|Traceback|OSError|RuntimeError" "'"$PWD"'/logs/vllm_server.log" 2>/dev/null; do
+  until grep -qE "Uvicorn running|Application startup complete" "'"$PWD"'/logs/vllm_server.log" 2>/dev/null \
+     || grep -E "Traceback|OSError|RuntimeError" "'"$PWD"'/logs/vllm_server.log" 2>/dev/null | grep -qv "WARNING"; do
     sleep 8
   done
 '; then
