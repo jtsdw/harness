@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
-# Starts vLLM on the NSCC H100 node. See ../README.md -- this whole project is UNVERIFIED against
-# real hardware (no access to that machine from this session); every flag here is a best-effort
-# reading of vLLM's own docs/blog posts, not a known-working recipe. Run this, then
-# ./scripts/verify_eagle3.sh, and report back what actually happens.
+# Starts vLLM on the NSCC H100 node. See ../README.md -- this session still has no direct access
+# to that machine, so this remains largely a best-effort reading of vLLM's own docs/source rather
+# than a known-working recipe, but as of 2026-08-08 it has real feedback from someone who can run
+# it: model + EAGLE-3 draft load fine, but kernel warmup crashed on a missing CUDA toolkit (no
+# nvcc/CUDA_HOME on this node) -- worked around below via VLLM_USE_FLASHINFER_SAMPLER=0. Hasn't
+# gotten past that point yet. Run this, then ./scripts/verify_eagle3.sh, and report back what
+# actually happens.
 #
 # Optional overrides:
 #   MODEL                     (default: Qwen/Qwen3-32B)
@@ -23,6 +26,11 @@
 #   HF_HOME                   (default: $HOME/scratch/model/.hf-cache if unset -- NSCC convention,
 #                             same reasoning as local-model-server/scripts/serve.sh's HF_HOME
 #                             handling: large files belong under $HOME/scratch/, not $HOME itself)
+#   VLLM_USE_FLASHINFER_SAMPLER (default: 0 -- disabled. This node has no nvcc/CUDA_HOME, and the
+#                             FlashInfer fused sampler needs to JIT-compile a kernel the first time
+#                             it's used, which crashes without a CUDA toolkit. Set to 1 to re-enable
+#                             once/if a real CUDA toolkit is available on this node -- should be
+#                             faster than the fallback, just untested here)
 
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -38,6 +46,18 @@ export PATH="$HOME/.local/bin:$PATH"
 : "${SPECULATIVE_MODE:=}"
 : "${EAGLE3_DRAFT_MODEL:=RedHatAI/Qwen3-32B-speculator.eagle3}"
 : "${NUM_SPECULATIVE_TOKENS:=3}"
+# 2026-08-08 real finding: this node has no discoverable CUDA toolkit (nvcc not found,
+# /usr/local/cuda doesn't exist -- only the driver seems to be present), which crashed vLLM for
+# real during kernel warmup ("RuntimeError: Could not find nvcc...") the first time it tried to
+# JIT-compile FlashInfer's fused top-k/top-p sampling kernel. VLLM_USE_FLASHINFER_SAMPLER=0 (real
+# env var, confirmed in vLLM's own envs.py) skips that kernel entirely, falling back to vLLM's
+# native PyTorch/Triton sampling path -- no JIT compile needed. Trade-off: this is presumably
+# somewhat slower than the fused kernel would be, real cost not measured here. If CUDA_HOME/nvcc
+# ever get properly set up on this node (e.g. via `module load cuda` if this cluster uses
+# Environment Modules -- worth checking), this can go back to the default (unset this override)
+# for the real fused-kernel performance.
+: "${VLLM_USE_FLASHINFER_SAMPLER:=0}"
+export VLLM_USE_FLASHINFER_SAMPLER
 
 # Same defensive fix as local-model-server/scripts/serve.sh -- PBS/Slurm clusters can set
 # CUDA_VISIBLE_DEVICES to GPU UUIDs instead of plain integers. Confirmed to break the OLD vLLM
