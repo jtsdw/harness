@@ -27,7 +27,7 @@
 | 14 | [`benchmark_integration_playbook.md`](./benchmark_integration_playbook.md) | 接入新 benchmark 的操作手册：三层难度分类、前置条件检查、核心架构原则、实现步骤划分、验证顺序、会反复遇到的坑分类总结 | 下次要接一个新 benchmark 时，先看这篇 |
 | 14b | [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md) | 上面那篇手册的真实案例来源：接入 tau2-bench（双控 agent 评测）的完整全链路记录——同步/异步桥接方案、三个真实 bug 的排查修复、Hooks 触发验证、原生 CLI vs 我们适配器（修复前后两个版本）的逐任务结果对比 | 读完 14，想看具体案例细节时看 |
 | 15 | [`remote_compute_workflow.md`](./remote_compute_workflow.md) | 本地 agent 节点 + 远程 NSCC 计算节点的日常工作流：代码同步（git 为主）、结果拉取、PBS 两种使用范式（交互式常驻 vLLM / 批处理长任务）、计算节点友好格式检查清单、待现场验证清单 | 要往计算节点部署/跑实验时看 |
-| 15b | [`nscc_tau2_full_run_agent_guide.md`](./nscc_tau2_full_run_agent_guide.md) | 面向执行型 agent 的 NSCC τ²-bench 全量 runbook：代码/数据边界、五域 smoke gate、402-task core full controller、探针验收、PBS 恢复与结果回收 | 准备在 NSCC 真正启动 τ² 全量时看 |
+| 15b | [`nscc_tau2_full_run_agent_guide.md`](./nscc_tau2_full_run_agent_guide.md) | NSCC τ²-bench 简明运行指南：PBS/backend 模板、五域 smoke/full、验收与结果回收 | 准备在 NSCC 启动 τ² 全量时看 |
 | 16 | [`team_collaboration.md`](./team_collaboration.md) | 两人协作方案：git 分支+PR 规范、共享 NSCC 账号下的计算资源协调、项目管理约定 | 读完 15，两人协作时看 |
 | 17 | [`acceleration_methods_survey.md`](./acceleration_methods_survey.md) | 目标五的持续积累清单：已完成分析 SPORK（论文说的问题为什么在我们数据里没出现）+ ToolSpec（用真实 token 层数据算出论文没给的 tool-call token 占比 17.5%，换算出更保守的整体收益估算）+ 9 篇候选论文（LLMCompiler/ReWOO/SGLang/Preble/StreamingLLM/H2O/LLMLingua/FrugalGPT/Speculative Actions）分类和优先级建议 | 读完 11（roadmap），想知道外部方法能不能落进我们的干预接口时看 |
 | 17b | [`toolspec_integration_findings.md`](./toolspec_integration_findings.md) | ToolSpec 原生复现（五种方法真实速度对比，发现"并非严格 lossless"的真实特性）+ 迁移进 harness（自定义 `ModelAPI` provider，因为它是原始 HF transformers 生成循环不是 HTTP 服务）+ 二次复现，逐 token 精确对齐原生仓库输出 | 读完 17，想看具体接入案例时看 |

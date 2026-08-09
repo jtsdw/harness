@@ -18,6 +18,7 @@ dependencies = [
     "inspect_trace",
     "tau2",
     "anyio",
+    "zstandard",
 ]
 
 [tool.uv.sources]

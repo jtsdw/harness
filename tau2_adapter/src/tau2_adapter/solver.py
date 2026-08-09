@@ -12,6 +12,7 @@ evaluator, unmodified -- inside a worker thread (`anyio.to_thread.run_sync`), be
 
 from __future__ import annotations
 
+import logging
 import os
 
 import anyio.to_thread
@@ -31,8 +32,9 @@ from tau2_adapter.runtime import (
 )
 
 
-EMPTY_RESPONSE_RETRIES_ENV = "TAU2_AGENT_MAX_EMPTY_RETRIES"
-LEGACY_EMPTY_RESPONSE_RETRIES_ENV = "TAU2_EMPTY_RESPONSE_RETRIES"
+EMPTY_RESPONSE_RETRIES_ENV = "TAU2_EMPTY_RESPONSE_RETRIES"
+LEGACY_EMPTY_RESPONSE_RETRIES_ENV = "TAU2_AGENT_MAX_EMPTY_RETRIES"
+logger = logging.getLogger(__name__)
 
 
 def _user_llm_args() -> dict:
@@ -49,7 +51,15 @@ def _user_llm_args() -> dict:
 def _empty_response_retries() -> int:
     raw = os.environ.get(EMPTY_RESPONSE_RETRIES_ENV)
     if raw is None:
-        raw = os.environ.get(LEGACY_EMPTY_RESPONSE_RETRIES_ENV, "3")
+        raw = os.environ.get(LEGACY_EMPTY_RESPONSE_RETRIES_ENV)
+        if raw is not None:
+            logger.warning(
+                "%s is deprecated; use %s instead.",
+                LEGACY_EMPTY_RESPONSE_RETRIES_ENV,
+                EMPTY_RESPONSE_RETRIES_ENV,
+            )
+    if raw is None:
+        raw = "3"
     retries = int(raw)
     if retries < 0:
         raise ValueError(f"{EMPTY_RESPONSE_RETRIES_ENV} must be non-negative")
@@ -134,9 +144,3 @@ def tau2_solver(
         return state
 
     return solve
-
-
-@solver
-def tau2_mock_solver() -> Solver:
-    """Backward-compatible mock-domain solver alias."""
-    return tau2_solver(domain="mock")

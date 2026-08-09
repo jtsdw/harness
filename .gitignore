@@ -17,9 +17,8 @@
 # Reproducibly provisioned third-party source trees (see tau2_adapter setup).
 /.deps/
 
-# Workstation-only RTX 5090/Qwen runner. Keep it on the local machine; the
-# shared adapter and NSCC deployment must not depend on this execution profile.
-/tau2_qwen27b_local/
+# Machine-specific values for the tracked local Qwen execution profile.
+/tau2_qwen27b_local/config.env
 
 # inspect_trace's own derived JSONL output (only meaningful alongside a specific run's .eval log)
 **/.inspect_trace/

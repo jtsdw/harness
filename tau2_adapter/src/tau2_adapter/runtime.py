@@ -117,7 +117,7 @@ def _derive_read_log_allowlist(task: Task) -> set[str]:
 
 
 def build_domain_environment(domain: str, task: Task) -> Environment:
-    """Build a fresh environment for one task using tau2's own builder."""
+    """Build a fresh environment for one task using tau2's own builder semantics."""
     env_kwargs = json_object_from_env("TAU2_ENV_ARGS")
     if domain == "banking_knowledge":
         if "retrieval_variant" in env_kwargs:

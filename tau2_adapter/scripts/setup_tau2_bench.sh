@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
-# One-shot setup for the tau2-bench dependency: fetch the pinned upstream commit,
-# apply the local compatibility patch, and synchronize the tau2 and adapter
-# Python 3.12 environments. The version check makes repeated runs deterministic.
+# Setup for the tau2-bench dependency: fetch the pinned upstream commit, apply
+# the local compatibility patch, and synchronize the adapter environment.
 #
 # This does NOT touch efficient-harness's own git history -- tau2-bench is a separate upstream
 # repo (github.com/sierra-research/tau2-bench) we depend on via a path dependency
@@ -11,6 +10,7 @@
 #
 # Usage:
 #   ./scripts/setup_tau2_bench.sh
+#   ./scripts/setup_tau2_bench.sh --with-baseline  # also sync tau2's own venv
 #
 # Env vars:
 #   TAU2_BENCH_REPO   Upstream repository
@@ -23,7 +23,21 @@ PROJECT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${PROJECT_DIR}/.." && pwd)"
 TAU2_SOURCE_DIR="${REPO_ROOT}/.deps/tau2-bench"
 : "${TAU2_BENCH_REPO:=https://github.com/sierra-research/tau2-bench.git}"
-TAU2_BENCH_REF="a1e85084a3960281cb06997594133e8f39ea42a7"
+: "${TAU2_BENCH_REF:=a1e85084a3960281cb06997594133e8f39ea42a7}"
+
+WITH_BASELINE=false
+case "${1:-}" in
+  "") ;;
+  --with-baseline) WITH_BASELINE=true ;;
+  -h|--help)
+    echo "Usage: $0 [--with-baseline]"
+    exit 0
+    ;;
+  *)
+    echo "Usage: $0 [--with-baseline]" >&2
+    exit 2
+    ;;
+esac
 
 export PATH="$HOME/.local/bin:$PATH"
 if ! command -v uv >/dev/null 2>&1; then
@@ -42,13 +56,21 @@ elif [[ ! -d "${TAU2_SOURCE_DIR}/.git" ]]; then
   exit 1
 fi
 
+remote_url="$(git -C "$TAU2_SOURCE_DIR" remote get-url origin 2>/dev/null || true)"
+if [[ -z "$remote_url" ]]; then
+  git -C "$TAU2_SOURCE_DIR" remote add origin "$TAU2_BENCH_REPO"
+elif [[ "$remote_url" != "$TAU2_BENCH_REPO" ]]; then
+  echo "ERROR: tau2-bench origin is $remote_url; expected $TAU2_BENCH_REPO." >&2
+  exit 1
+fi
+
 actual_ref="$(git -C "$TAU2_SOURCE_DIR" rev-parse --verify HEAD 2>/dev/null || true)"
-if [[ -z "$actual_ref" ]]; then
-  remote_url="$(git -C "$TAU2_SOURCE_DIR" remote get-url origin 2>/dev/null || true)"
-  if [[ -z "$remote_url" ]]; then
-    git -C "$TAU2_SOURCE_DIR" remote add origin "$TAU2_BENCH_REPO"
-  elif [[ "$remote_url" != "$TAU2_BENCH_REPO" ]]; then
-    echo "ERROR: tau2-bench origin is $remote_url; expected $TAU2_BENCH_REPO." >&2
+if [[ "$actual_ref" != "$TAU2_BENCH_REF" ]]; then
+  if [[ -n "$actual_ref" ]] &&
+     { ! git -C "$TAU2_SOURCE_DIR" diff --quiet --ignore-submodules -- ||
+       ! git -C "$TAU2_SOURCE_DIR" diff --cached --quiet --ignore-submodules --; }; then
+    echo "ERROR: tau2-bench has local changes; cannot switch revisions safely." >&2
+    echo "Resolve them, then rerun this script." >&2
     exit 1
   fi
   echo "== Fetching pinned tau2-bench commit $TAU2_BENCH_REF =="
@@ -61,7 +83,6 @@ fi
 
 if [[ "$actual_ref" != "$TAU2_BENCH_REF" ]]; then
   echo "ERROR: tau2-bench is at $actual_ref; expected $TAU2_BENCH_REF." >&2
-  echo "Move the existing checkout aside, then rerun this setup script." >&2
   exit 1
 fi
 
@@ -79,9 +100,11 @@ else
   exit 1
 fi
 
-echo
-echo "== Synchronizing tau2-bench (Python 3.12) =="
-(cd "$TAU2_SOURCE_DIR" && uv sync --frozen --python 3.12)
+if [[ "$WITH_BASELINE" == true ]]; then
+  echo
+  echo "== Synchronizing tau2-bench baseline environment (Python 3.12) =="
+  (cd "$TAU2_SOURCE_DIR" && uv sync --frozen --python 3.12)
+fi
 
 echo
 echo "== Synchronizing tau2_adapter (Python 3.12) =="

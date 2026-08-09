@@ -1944,6 +1944,7 @@ dependencies = [
     { name = "inspect-ai" },
     { name = "inspect-trace" },
     { name = "tau2" },
+    { name = "zstandard" },
 ]
 
 [package.optional-dependencies]
@@ -1960,6 +1961,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'dev'" },
     { name = "pytest-asyncio", marker = "extra == 'dev'" },
     { name = "tau2", editable = "../.deps/tau2-bench" },
+    { name = "zstandard" },
 ]
 provides-extras = ["dev"]
 

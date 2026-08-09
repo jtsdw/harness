@@ -96,6 +96,8 @@ qsub scripts/pbs_vllm_server_job.sh
 | `tau2_adapter/scripts/setup_tau2_bench.sh` | 装 tau2-bench 依赖 + 应用本地 bug 补丁，幂等 |
 | `tau2_adapter/scripts/run_native_baseline.sh` | tau2-bench 原生 CLI 基线跑法 |
 | `tau2_adapter/scripts/run_adapter.sh emulate\|native` | tau2-bench 适配器跑法（两个变体） |
+| `tau2_adapter/scripts/run_full_core.sh` | tau2 五域 core controller：逐域日志、验收与恢复 |
+| `scripts/nscc_tau2_qwen36_job.sh` | NSCC Qwen3.6 backend + smoke + full controller PBS 模板 |
 
 ## 提交代码到计算节点友好格式：检查清单
 

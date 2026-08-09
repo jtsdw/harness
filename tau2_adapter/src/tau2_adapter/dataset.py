@@ -33,8 +33,3 @@ def tau2_dataset(
         for task in tasks
     ]
     return MemoryDataset(samples=samples, name=f"tau2_{domain}")
-
-
-def mock_dataset() -> Dataset:
-    """Backward-compatible mock-domain dataset alias."""
-    return tau2_dataset(domain="mock")
