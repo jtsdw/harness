@@ -204,7 +204,9 @@ def extract_all() -> dict:
         tok = token_by_id.get(uuid_by_task_id.get(tid))
         t["adapter_episode"] = (
             {
-                "end_to_end_latency_seconds": ep.end_to_end_latency_seconds,
+                "sample_end_to_end_latency_seconds": ep.sample_end_to_end_latency_seconds,
+                "sample_working_time_seconds": ep.sample_working_time_seconds,
+                "model_tool_window_seconds": ep.model_tool_window_seconds,
                 "n_llm_calls": ep.n_llm_calls,
                 "success": ep.success,
             }
@@ -244,7 +246,9 @@ def extract_all() -> dict:
             "total_reused_message_tokens_estimate": tl.total_reused_message_tokens_estimate,
         },
         "episode_layer": {
-            "mean_end_to_end_latency_seconds": el.mean_end_to_end_latency_seconds,
+            "mean_sample_end_to_end_latency_seconds": el.mean_sample_end_to_end_latency_seconds,
+            "mean_sample_working_time_seconds": el.mean_sample_working_time_seconds,
+            "mean_model_tool_window_seconds": el.mean_model_tool_window_seconds,
             "mean_n_llm_calls": el.mean_n_llm_calls,
             "episodes_with_observed_parallel": el.episodes_with_observed_parallel,
         },

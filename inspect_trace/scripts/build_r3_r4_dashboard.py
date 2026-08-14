@@ -334,7 +334,9 @@ def extract_goal2_layers() -> dict:
             "success_rate": s.success_rate,
             "total_cost_usd": s.total_cost_usd,
             "cost_per_successful_episode_usd": s.cost_per_successful_episode_usd,
-            "mean_end_to_end_latency_seconds": s.mean_end_to_end_latency_seconds,
+            "mean_sample_end_to_end_latency_seconds": s.mean_sample_end_to_end_latency_seconds,
+            "mean_sample_working_time_seconds": s.mean_sample_working_time_seconds,
+            "mean_model_tool_window_seconds": s.mean_model_tool_window_seconds,
             "mean_n_llm_calls": s.mean_n_llm_calls,
             "mean_n_tool_calls": s.mean_n_tool_calls,
             "total_retries": s.total_retries,
@@ -406,8 +408,9 @@ def extract_all() -> dict:
         ep = mt_episode_by_uuid.get(samp["uuid"])
         samp["episode"] = (
             {
-                "end_to_end_latency_seconds": ep.end_to_end_latency_seconds,
-                "critical_path_latency_seconds": ep.critical_path_latency_seconds,
+                "sample_end_to_end_latency_seconds": ep.sample_end_to_end_latency_seconds,
+                "sample_working_time_seconds": ep.sample_working_time_seconds,
+                "model_tool_window_seconds": ep.model_tool_window_seconds,
                 "total_busy_seconds": ep.total_busy_seconds,
                 "concurrency_savings_seconds": ep.concurrency_savings_seconds,
                 "cost_usd": ep.cost_usd,

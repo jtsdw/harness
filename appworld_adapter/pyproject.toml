@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "appworld-adapter"
+version = "0.1.0"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+  "inspect_ai==0.3.251",
+  "appworld",
+  "appworld-agents",
+  "anyio",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv.sources]
+appworld = { path = "../.deps/appworld", editable = true }
+appworld-agents = { path = "../.deps/appworld/experiments", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]

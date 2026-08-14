@@ -295,7 +295,8 @@ function renderProfiling() {
     ["真实计费 output tokens", tl.total_billed_output_tokens.toLocaleString(), ""],
     ["工具 schema 复用估算", tl.total_reused_tool_schema_tokens_estimate.toLocaleString(), (tl.total_reused_tool_schema_tokens_estimate / tl.total_reused_message_tokens_estimate).toFixed(1) + "x 于对话历史复用"],
     ["对话历史复用估算", tl.total_reused_message_tokens_estimate.toLocaleString(), "比 BFCL 的 35x 低得多——双控对话占比更高"],
-    ["平均端到端延迟", fmtNum(el.mean_end_to_end_latency_seconds, 1) + "s", fmtNum(el.mean_n_llm_calls, 1) + " 次模型调用/episode"],
+    ["平均端到端延迟", fmtNum(el.mean_sample_end_to_end_latency_seconds, 1) + "s", fmtNum(el.mean_n_llm_calls, 1) + " 次模型调用/episode"],
+    ["平均 model/tool window", fmtNum(el.mean_model_tool_window_seconds, 1) + "s", "首个 model/tool 事件开始到最后一个结束"],
     ["观测到真并行的 episode", el.episodes_with_observed_parallel, "跟 BFCL 一致：0"],
   ];
   document.getElementById("tokenLayerCards").innerHTML = cards.map(([label, num, foot]) =>
@@ -347,7 +348,8 @@ function showTranscript(id) {
     <span><span class="m-label">原生对话轮数 </span><span class="m-val">${t.native_messages.length}</span></span>
     <span><span class="m-label">原生耗时 </span><span class="m-val">${fmtNum(t.native_duration, 1)}s</span></span>
     ${ep ? `<span><span class="m-label">适配器模型调用次数 </span><span class="m-val">${ep.n_llm_calls}</span></span>` : ""}
-    ${ep ? `<span><span class="m-label">适配器端到端延迟 </span><span class="m-val">${fmtNum(ep.end_to_end_latency_seconds, 1)}s</span></span>` : ""}
+    ${ep ? `<span><span class="m-label">适配器端到端延迟 </span><span class="m-val">${fmtNum(ep.sample_end_to_end_latency_seconds, 1)}s</span></span>` : ""}
+    ${ep ? `<span><span class="m-label">适配器 model/tool window </span><span class="m-val">${fmtNum(ep.model_tool_window_seconds, 1)}s</span></span>` : ""}
     ${tok ? `<span><span class="m-label">适配器计费 tokens </span><span class="m-val">I:${tok.billed_input_tokens} O:${tok.billed_output_tokens}</span></span>` : ""}
   `;
   document.getElementById("transcriptBody").innerHTML = t.native_messages.map(m => {

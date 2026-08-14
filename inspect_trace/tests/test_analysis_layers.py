@@ -5,19 +5,22 @@ Same style as the other inspect_trace tests: drive a real `eval()` run through
 hand-built fixture.
 """
 
+import json
 from pathlib import Path
 
 import anyio
+import pytest
 from inspect_ai import Task, eval
 from inspect_ai.dataset import Sample
 from inspect_ai.model import (
     ChatCompletionChoice,
     ChatMessageAssistant,
     ModelOutput,
+    ModelUsage,
     get_model,
 )
 from inspect_ai.scorer import includes
-from inspect_ai.solver import basic_agent
+from inspect_ai.solver import basic_agent, solver
 from inspect_ai.tool import ToolCall, tool
 
 from inspect_trace.analysis import episode_layer, token_layer
@@ -121,9 +124,15 @@ def test_episode_layer_summarizes_real_hooks_output(
     assert run_summary.success_rate == 1.0
     # sequential mock trajectory -- no concurrent tool execution.
     assert episode.observed_parallel is False
-    assert episode.end_to_end_latency_seconds is not None
-    # critical path == end-to-end always (same number by definition, see episode_layer.py).
-    assert episode.critical_path_latency_seconds == episode.end_to_end_latency_seconds
+    assert episode.sample_end_to_end_latency_seconds is not None
+    assert episode.sample_working_time_seconds is not None
+    assert episode.model_tool_window_seconds is not None
+    assert episode.total_busy_seconds is not None
+    assert (
+        episode.sample_end_to_end_latency_seconds
+        >= episode.model_tool_window_seconds
+        >= episode.total_busy_seconds
+    )
     assert episode.concurrency_savings_seconds == 0.0
     assert episode.n_retries == 0
 
@@ -195,13 +204,86 @@ def test_episode_layer_detects_real_concurrency(tmp_path: Path, monkeypatch) -> 
     run_summary = episode_layer.summarize_run(tmp_path)
     episode = run_summary.per_episode[0]
     assert episode.observed_parallel is True
-    # end-to-end is still the same total wall-clock number...
-    assert episode.critical_path_latency_seconds == episode.end_to_end_latency_seconds
-    # ...but real overlap must show up as positive concurrency savings (naive exclusive sum
-    # double-counts the overlapping window; total_busy_seconds doesn't).
-    assert episode.concurrency_savings_seconds > 0.0
+    assert episode.sample_end_to_end_latency_seconds is not None
+    assert episode.model_tool_window_seconds is not None
     assert episode.total_busy_seconds is not None
+    assert (
+        episode.sample_end_to_end_latency_seconds
+        >= episode.model_tool_window_seconds
+        >= episode.total_busy_seconds
+    )
+    # Real overlap must show up as positive concurrency savings.
+    assert episode.concurrency_savings_seconds > 0.0
+    assert episode.concurrency_savings_seconds == pytest.approx(
+        episode.exclusive_model_seconds
+        + episode.exclusive_tool_seconds
+        - episode.total_busy_seconds
+    )
     assert (
         episode.total_busy_seconds
         < episode.exclusive_model_seconds + episode.exclusive_tool_seconds
     )
+
+
+def test_role_rollups_and_usage_validation_real_eval(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("INSPECT_TRACE_DIR", str(tmp_path))
+
+    def output(text: str, input_tokens: int, output_tokens: int) -> ModelOutput:
+        result = ModelOutput.from_content(model="mockllm/model", content=text)
+        result.usage = ModelUsage(
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            total_tokens=input_tokens + output_tokens,
+        )
+        return result
+
+    predictor = get_model("mockllm/model", custom_outputs=[output("predict", 11, 2)])
+    main = get_model("mockllm/model", custom_outputs=[output("main", 13, 3)])
+    unknown = get_model("mockllm/model", custom_outputs=[output("done", 17, 5)])
+
+    @solver
+    def role_calls():
+        async def solve(state, generate):
+            await get_model(role="predictor").generate(state.messages)
+            await get_model(role="main").generate(state.messages)
+            state.output = await unknown.generate(state.messages)
+            return state
+
+        return solve
+
+    task = Task(
+        dataset=[Sample(input="exercise roles", target="done")],
+        solver=role_calls(),
+        scorer=includes(),
+        model_roles={"predictor": predictor, "main": main},
+    )
+    logs = eval(task, model=unknown)
+    assert logs[0].status == "success"
+
+    tokens = token_layer.summarize_run(tmp_path)
+    episodes = episode_layer.summarize_run(tmp_path)
+    assert {role: summary.n_model_calls for role, summary in tokens.per_role.items()} == {
+        "predictor": 1,
+        "main": 1,
+        "unknown": 1,
+    }
+    assert {
+        role: (summary.billed_input_tokens, summary.billed_output_tokens)
+        for role, summary in tokens.per_role.items()
+    } == {"predictor": (11, 2), "main": (13, 3), "unknown": (17, 5)}
+    assert episodes.per_role_model_calls == {"predictor": 1, "main": 1, "unknown": 1}
+    assert all(value > 0 for value in episodes.per_role_model_latency_seconds.values())
+
+    trace_file = next(tmp_path.rglob("sample-*.jsonl"))
+    lines = trace_file.read_text().splitlines()
+    for index, line in enumerate(lines):
+        record = json.loads(line)
+        if record.get("kind") == "token_attribution" and record["billed_input_tokens"] == 11:
+            record["billed_input_tokens"] = 12
+            lines[index] = json.dumps(record)
+            break
+    else:
+        raise AssertionError("predictor token attribution not found")
+    trace_file.write_text("\n".join(lines) + "\n")
+    with pytest.raises(ValueError, match="role_usage mismatch for predictor"):
+        token_layer.summarize_run(tmp_path)

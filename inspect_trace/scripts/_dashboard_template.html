@@ -597,7 +597,8 @@ function renderGoal2() {
   document.getElementById("episodeLayerGrid").innerHTML =
     goal2Card("multi_turn_base（200 样本）", [
       ["success rate", (el.multi_turn_base.success_rate * 100).toFixed(1) + "%"],
-      ["平均 end-to-end 耗时", el.multi_turn_base.mean_end_to_end_latency_seconds.toFixed(1) + "s"],
+      ["平均 end-to-end 耗时", el.multi_turn_base.mean_sample_end_to_end_latency_seconds.toFixed(1) + "s"],
+      ["平均 model/tool window", el.multi_turn_base.mean_model_tool_window_seconds.toFixed(1) + "s"],
       ["平均 LLM 调用次数", el.multi_turn_base.mean_n_llm_calls.toFixed(2)],
       ["平均 tool 调用次数", el.multi_turn_base.mean_n_tool_calls.toFixed(2)],
       ["总重试次数", fmtNum(el.multi_turn_base.total_retries)],
@@ -605,7 +606,8 @@ function renderGoal2() {
     ]) +
     goal2Card("live_parallel（15 样本）", [
       ["success rate", (el.live_parallel.success_rate * 100).toFixed(1) + "%"],
-      ["平均 end-to-end 耗时", el.live_parallel.mean_end_to_end_latency_seconds.toFixed(2) + "s"],
+      ["平均 end-to-end 耗时", el.live_parallel.mean_sample_end_to_end_latency_seconds.toFixed(2) + "s"],
+      ["平均 model/tool window", el.live_parallel.mean_model_tool_window_seconds.toFixed(2) + "s"],
       ["平均 LLM 调用次数", el.live_parallel.mean_n_llm_calls.toFixed(2)],
       ["平均 tool 调用次数", el.live_parallel.mean_n_tool_calls.toFixed(2)],
       ["总重试次数", fmtNum(el.live_parallel.total_retries)],
@@ -751,6 +753,8 @@ function renderTimeline(sample) {
   ];
   if (sample.episode) {
     statRows.push(
+      ["目标二 · end-to-end", sample.episode.sample_end_to_end_latency_seconds.toFixed(2) + "s"],
+      ["目标二 · model/tool window", sample.episode.model_tool_window_seconds.toFixed(2) + "s"],
       ["目标二 · concurrency savings", sample.episode.concurrency_savings_seconds.toFixed(3) + "s"],
       ["目标二 · 成本（本地 vLLM）", "$" + sample.episode.cost_usd.toFixed(2)],
     );

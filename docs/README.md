@@ -26,6 +26,7 @@
 | 13 | [`deployment_migration_guide.md`](./deployment_migration_guide.md) | 迁移到新服务器（H100 80GB）+ 团队协作指南：版本控制补救、CUDA 13 下版本锁定怎么变、原生 tool-calling 能否替代 emulate_tools、MIG 分区 vs 真并发两种多人共用方案 | 需要迁移/加人的时候看 |
 | 14 | [`benchmark_integration_playbook.md`](./benchmark_integration_playbook.md) | 接入新 benchmark 的操作手册：三层难度分类、前置条件检查、核心架构原则、实现步骤划分、验证顺序、会反复遇到的坑分类总结 | 下次要接一个新 benchmark 时，先看这篇 |
 | 14b | [`tau2_bench_integration_findings.md`](./tau2_bench_integration_findings.md) | 上面那篇手册的真实案例来源：接入 tau2-bench（双控 agent 评测）的完整全链路记录——同步/异步桥接方案、三个真实 bug 的排查修复、Hooks 触发验证、原生 CLI vs 我们适配器（修复前后两个版本）的逐任务结果对比 | 读完 14，想看具体案例细节时看 |
+| 14c | [`benchmark_selection_appworld_decision.md`](./benchmark_selection_appworld_decision.md) + [`appworld_adapter_initial_design.md`](./appworld_adapter_initial_design.md) | 为什么选择 AppWorld，以及 adapter、P0 测量闭环和 57 题 dev baseline 的当前状态 | 读完 14，准备使用 primary closed-loop workload 时看 |
 | 15 | [`remote_compute_workflow.md`](./remote_compute_workflow.md) | 本地 agent 节点 + 远程 NSCC 计算节点的日常工作流：代码同步（git 为主）、结果拉取、PBS 两种使用范式（交互式常驻 vLLM / 批处理长任务）、计算节点友好格式检查清单、待现场验证清单 | 要往计算节点部署/跑实验时看 |
 | 15b | [`nscc_tau2_full_run_agent_guide.md`](./nscc_tau2_full_run_agent_guide.md) | NSCC τ²-bench 简明运行指南：PBS/backend 模板、五域 smoke/full、验收与结果回收 | 准备在 NSCC 启动 τ² 全量时看 |
 | 16 | [`team_collaboration.md`](./team_collaboration.md) | 两人协作方案：git 分支+PR 规范、共享 NSCC 账号下的计算资源协调、项目管理约定 | 读完 15，两人协作时看 |
@@ -33,7 +34,7 @@
 | 17b | [`toolspec_integration_findings.md`](./toolspec_integration_findings.md) | ToolSpec 原生复现（五种方法真实速度对比，发现"并非严格 lossless"的真实特性）+ 迁移进 harness（自定义 `ModelAPI` provider，因为它是原始 HF transformers 生成循环不是 HTTP 服务）+ 二次复现，逐 token 精确对齐原生仓库输出 | 读完 17，想看具体接入案例时看 |
 | 17c | [`toolspec_vllm_speculative_comparison.md`](./toolspec_vllm_speculative_comparison.md) | ToolSpec vs vLLM 自带 ngram 投机解码的真实对比：ToolSpec 领域特定方法比通用方法快约 60%、偏离率更低；顺带发现一个 `inspect_trace` 的 `vllm_metrics` 采集器在某些场景下完全不产出记录的真实 bug，跟 `goal2_real_validation_findings.md` 的既有结论有未解决的冲突 | 读完 17b，想知道跟 vLLM 自带能力比怎么样时看 |
 
-读完这 22 篇，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
+读完以上文档，应该能达到"看得懂现在的代码、说得清楚下一步该做什么"的程度。如果只有十分钟，只读 1、2、11——分别是"要做什么"、"为什么用这个底座"、"现在做到哪了"。
 
 ## 按用途查找
 
@@ -46,6 +47,7 @@
 - **忘了某个词是什么意思** → [`glossary.md`](./glossary.md)
 - **要在新机器上从零搭环境** → [`environment_checklist.md`](./environment_checklist.md)
 - **想接入一个新的外部 benchmark 框架** → 14（benchmark_integration_playbook）
+- **想运行或分析 AppWorld** → 14c（选型与当前验证状态）+ `../appworld_adapter/README.md`（唯一运行入口）
 - **要往 NSCC 计算节点部署/跑实验、或者两人协作有疑问** → 15（remote_compute_workflow）+ 16（team_collaboration）；若要跑 τ² 全量，再读 15b
 - **看到一篇 agent 加速相关论文，想知道跟我们有没有关系** → 17（acceleration_methods_survey）
 
@@ -59,6 +61,7 @@
 - 目标二三层 profiling 实现：`inspect_trace/vllm_metrics.py`（model invocation 层实时采集）+ `inspect_trace/analysis/{token_layer,episode_layer,pricing}.py`（token/episode 层离线分析），自带测试 `tests/test_vllm_metrics.py`/`test_analysis_layers.py`
 - 本地模型服务：`../local-model-server/`，自带 `README.md` + `scripts/{setup,serve,stop}.sh`
 - tau2-bench 适配器（第三方 benchmark 接入示例，OpenAI-compatible 服务型）：`../tau2_adapter/`，自带 `scripts/{setup_tau2_bench,run_native_baseline,run_adapter}.sh`
+- AppWorld Base 适配器（primary closed-loop workload）：`../appworld_adapter/`，唯一正式入口为 `scripts/run_adapter.sh`
 - ToolSpec 适配器（第三方加速方法接入示例，原始 HF transformers 生成循环型，自定义 `ModelAPI`）：`../toolspec_adapter/`，自带 `scripts/{setup_toolspec,run_native_repro,run_adapter}.sh`
 - ToolSpec 可视化面板生成脚本：`../inspect_trace/scripts/build_toolspec_dashboard.py`，产出 `toolspec_dashboard.html`，每次运行都现场从原始 run 数据重新计算
 - 跨子项目脚本（NSCC 同步/PBS）：`../scripts/{pull_runs,nscc_interactive_gpu_session,pbs_vllm_server_job}.sh`，用法见 [`remote_compute_workflow.md`](./remote_compute_workflow.md)

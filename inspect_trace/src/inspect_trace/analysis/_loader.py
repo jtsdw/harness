@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
+
+from inspect_ai.log import EvalSample, read_eval_log
 
 
 def load_records_by_sample(trace_dir: Path) -> dict[str, list[dict]]:
@@ -35,6 +38,55 @@ def load_manifest(trace_dir: Path) -> list[dict]:
             if line:
                 records.append(json.loads(line))
     return records
+
+
+@dataclass(frozen=True)
+class ModelEventIndexEntry:
+    sample_uuid: str
+    role: str
+    interval: tuple[float, float] | None
+    working_time: float | None
+
+
+@dataclass
+class EvalSampleIndex:
+    samples: dict[str, EvalSample]
+    model_events: dict[str, ModelEventIndexEntry]
+
+    @property
+    def roles(self) -> dict[str, str]:
+        return {uuid: event.role for uuid, event in self.model_events.items()}
+
+
+def load_eval_sample_index(trace_dir: Path) -> EvalSampleIndex:
+    """Load each manifest log once and index samples and every model event UUID."""
+    samples: dict[str, EvalSample] = {}
+    model_events: dict[str, ModelEventIndexEntry] = {}
+    loaded_locations: set[str] = set()
+    for manifest in load_manifest(trace_dir):
+        location = manifest.get("log_location")
+        if not location or location in loaded_locations:
+            continue
+        loaded_locations.add(location)
+        log = read_eval_log(location)
+        for sample in log.samples or []:
+            if sample.uuid is None:
+                continue
+            samples[sample.uuid] = sample
+            for event in sample.events:
+                if event.event == "model" and event.uuid is not None:
+                    interval = (
+                        (event.timestamp.timestamp(), event.completed.timestamp())
+                        if event.completed is not None
+                        else None
+                    )
+                    model_events[event.uuid] = ModelEventIndexEntry(
+                        sample_uuid=sample.uuid,
+                        role=(event.role or "").strip() or "unknown",
+                        interval=interval,
+                        working_time=event.working_time,
+                    )
+    return EvalSampleIndex(samples=samples, model_events=model_events)
 
 
 def records_of_kind(records: list[dict], kind: str) -> list[dict]:
